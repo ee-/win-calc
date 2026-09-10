@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en-US" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculator</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="calc" id="calc">
+
+  <header class="titlebar">
+    <button type="button" class="titlebar-button" id="nav-button" aria-label="Open navigation" aria-expanded="false">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <span class="title" id="mode-title">Standard</span>
+    <button type="button" class="titlebar-button" id="history-button" aria-label="History" aria-pressed="false">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M8 4.4V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </header>
+
+  <div class="body">
+    <main class="surface">
+      <section class="display" aria-label="Display">
+        <div class="expression" id="expression"></div>
+        <output class="value" id="value" aria-live="polite">0</output>
+      </section>
+
+      <div class="memory-row" id="memory-row"></div>
+
+      <div class="keypad" id="keypad"></div>
+
+      <div class="placeholder" id="placeholder-panel" hidden>
+        <p class="placeholder-title" id="placeholder-title"></p>
+        <p class="placeholder-note">This mode is not implemented yet.</p>
+      </div>
+    </main>
+
+    <aside class="history" id="history-panel" aria-label="History" hidden>
+      <h2 class="history-title">History</h2>
+      <ul class="history-list" id="history-list"></ul>
+      <button type="button" class="history-clear" id="history-clear">Clear history</button>
+    </aside>
+
+    <nav class="drawer" id="mode-drawer" aria-label="Modes" hidden>
+      <h1 class="drawer-title">Calculator</h1>
+      <ul class="mode-list" id="mode-list"></ul>
+    </nav>
+  </div>
+
+</div>
+
+<script src="format.js"></script>
+<script src="engine.js"></script>
+<script src="modes/standard.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
