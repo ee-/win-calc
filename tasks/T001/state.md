@@ -8,10 +8,10 @@ Updated at every stage transition.
 
 ## Workflow State
 
-- Status: IMPLEMENTED — WO-1 delivered at `bc84a80`; WO-2..WO-7 pending
+- Status: IMPLEMENTED — WO-1 in rework cycle 1 (G3 returned: F-1); WO-2..WO-7 pending
 - Complexity: L3
 - Architecture effort: high
-- Rework cycle: 0
+- Rework cycle: 0 completed — 1 open (G3 return on F-1)
 - Fallback used: no
 - Base branch: main
 - Base commit: 8d5f2d4
@@ -28,7 +28,7 @@ Updated at every stage transition.
 - [x] Stage 3 Decompose — below
 - [ ] Stage 4 Implement — WO-1 delivered (`bc84a80`); WO-2..WO-7 pending
 - [ ] Stage 5 Verify — WO-1 verified (G2 record below); WO-2..WO-7 pending
-- [ ] Stage 6 Review — WO-1 review pending; WO-2..WO-7 pending
+- [ ] Stage 6 Review — WO-1: G3 verdict **CHANGES_REQUIRED** (F-1, blocking) — rework cycle 1 open: record the AC-009 live check, then re-issue G3 at `bc84a80`; see `review.md`; WO-2..WO-7 pending
 - [ ] Stage 7 Finalize — **G5**, then owner acceptance **G6**
 
 ---
@@ -112,6 +112,7 @@ implementation and nothing else.
   uses a classic `<script>` with no modules, so the constraint holds literally
   (no server required; `file://` works). No `serve.js`. No open questions for
   WO-1.
+- Open for the rework: nothing decided by design; F-1 is an evidence step.
 
 ---
 
@@ -152,7 +153,8 @@ result:            tests 42 · pass 42 · fail 0 · cancelled 0 · skipped 0 · 
 log path:          tasks/T001/evidence/g2-node-test-output.txt
 ```
 
-Full record: `tasks/T001/evidence/g2-verification.md`.
+Full record: `tasks/T001/evidence/g2-verification.md`. The independent reviewer
+re-ran the same command at the same head and reproduced 42/42, exit 0.
 
 ---
 
@@ -168,3 +170,6 @@ Full record: `tasks/T001/evidence/g2-verification.md`.
   `evidence/g2-node-path-demo.txt`.
 - Artifact commits after `bc84a80` are pipeline bookkeeping (contract freeze,
   evidence, review); product code is unchanged since `bc84a80`.
+- Open rework (cycle 1): record the AC-009 `file://` live check (command +
+  output + exit code) under `evidence/`, then re-issue G3 against `bc84a80`.
+  F-2 / F-3 / F-4 are non-blocking — see `review.md`.
