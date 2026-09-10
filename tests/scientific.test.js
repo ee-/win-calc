@@ -190,6 +190,15 @@ test("factorial, absolute value, mod, floor, ceil and round", () => {
   assert.equal(press(calc, "clear,4,point,5,unary:negate,unary:round"), "-5");
 });
 
+test("percent and reciprocal keep their meanings", () => {
+  const calc = sci();
+  assert.equal(press(calc, "5,0,unary:percent"), "0.5");
+  assert.equal(calc.expression, "/100(50)");
+  assert.equal(press(calc, "op:mul,8,equals"), "4");
+  assert.equal(press(calc, "clear,8,unary:reciprocal"), "0.125");
+  assert.equal(press(calc, "clear,0,unary:reciprocal"), ERRORS.divideByZero);
+});
+
 test("pi and e are the real constants", () => {
   const calc = sci();
   assert.equal(press(calc, "const:pi"), "3.141592653589793");
