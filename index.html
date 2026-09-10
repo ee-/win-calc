@@ -32,6 +32,13 @@
         <output class="value" id="value" aria-live="polite">0</output>
       </section>
 
+      <div class="programmer" id="programmer-panel" hidden>
+        <div class="programmer-words" id="programmer-words" aria-label="Word size"></div>
+        <div class="programmer-shifts" id="programmer-shifts" aria-label="Shift mode"></div>
+        <div class="programmer-readout" id="programmer-readout" aria-label="Base readout"></div>
+        <div class="programmer-bits" id="programmer-bits" aria-label="Bit toggles"></div>
+      </div>
+
       <div class="memory-row" id="memory-row"></div>
 
       <div class="keypad" id="keypad"></div>
@@ -60,6 +67,7 @@
 <script src="engine.js"></script>
 <script src="modes/standard.js"></script>
 <script src="modes/scientific.js"></script>
+<script src="modes/programmer.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>

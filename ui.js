@@ -81,25 +81,146 @@
     }
   }
 
+  /* A key may carry extra layers: Scientific's `alt` (the 2nd toggle) and
+   * Programmer's `variants`, selected by the engine's shift mode. */
+  function keyLayer(key, calculator) {
+    if (calculator.mode === "scientific" && calculator.second && key.alt) return key.alt;
+    if (key.variants) {
+      var variant = key.variants[calculator.shiftMode];
+      if (variant) return variant;
+    }
+    return key;
+  }
+
+  /* How a button reads its selected state: the active angle unit, base, word
+   * size and shift mode, the 2nd toggle, and a set bit. Actions without a
+   * selection state return null. */
+  function pressedState(action, calculator) {
+    var parts = String(action).split(":");
+    switch (parts[0]) {
+      case "angle": return calculator.angleUnit === parts[1].toUpperCase();
+      case "base": return calculator.base === parts[1];
+      case "word": return calculator.wordSize === parts[1];
+      case "shift": return calculator.shiftMode === parts[1];
+      case "second": return Boolean(calculator.second);
+      case "bit": return calculator.bitValue(Number(parts[1])) === 1;
+      default: return null;
+    }
+  }
+
+  function applyPressed(button, action, calculator) {
+    var pressed = pressedState(action, calculator);
+    if (pressed === null) button.removeAttribute("aria-pressed");
+    else button.setAttribute("aria-pressed", pressed ? "true" : "false");
+  }
+
   /* Scientific's 2nd key toggles the functions that carry an alt layer
-   * (sin -> sin-1 and the rest); the active angle unit reads as pressed, as
-   * the real app shows it. */
+   * (sin -> sin-1 and the rest); the active angle unit, base, word size and
+   * shift mode read as pressed, as the real app shows them. */
   function applyKeypadState(calculator) {
-    var second = calculator.mode === "scientific" && calculator.second;
     for (var i = 0; i < keypadEntries.length; i++) {
       var entry = keypadEntries[i];
       var key = entry.key;
-      var layer = second && key.alt ? key.alt : key;
+      var layer = keyLayer(key, calculator);
       entry.button.textContent = layer.label;
       entry.button.dataset.action = layer.action;
       entry.button.dataset.role = layer.role || key.role;
       entry.button.setAttribute("aria-label", layer.ariaLabel || layer.label);
-      if (key.action === "second") {
-        entry.button.setAttribute("aria-pressed", second ? "true" : "false");
-      } else if (key.action.indexOf("angle:") === 0) {
-        entry.button.setAttribute("aria-pressed",
-          calculator.angleUnit === key.action.slice(6).toUpperCase() ? "true" : "false");
+      // Base-restricted input: the real app dims the digits the active base
+      // does not accept (BIN gates 2-9 and A-F, OCT gates 8-9 and A-F, ...).
+      if (layer.action.indexOf("digit:") === 0) {
+        entry.button.disabled = !calculator.acceptsDigit(layer.action.slice(6));
       }
+      applyPressed(entry.button, layer.action, calculator);
+    }
+  }
+
+  /* Programmer mode's own display: the word-size and shift-mode selectors,
+   * the four live base readouts (each row selects its base) and the bit-toggle
+   * panel for the selected width. The values come from the engine, which owns
+   * the integer semantics. */
+  var programmerRows = [];  // { base, button, valueEl }
+  var programmerBits = [];  // { index, button }
+
+  /* The word-size and shift-mode selectors: the word size is one cycling
+   * button (the real app's shape), the shift mode a row of keys. The base
+   * readout rows double as the base selector. */
+  function renderProgrammerSelectors(container, items, prefix) {
+    container.textContent = "";
+    for (var i = 0; i < items.length; i++) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "memory-key";
+      button.textContent = items[i].label;
+      button.dataset.action = prefix + ":" + items[i].id;
+      container.appendChild(button);
+    }
+  }
+
+  function renderProgrammerWordButton(container) {
+    container.textContent = "";
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "memory-key";
+    button.dataset.action = "word:cycle";
+    button.setAttribute("aria-label", "Word size");
+    container.appendChild(button);
+  }
+
+  function renderProgrammerReadout(container, bases) {
+    programmerRows = [];
+    container.textContent = "";
+    for (var i = 0; i < bases.length; i++) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.className = "programmer-row";
+      row.dataset.action = "base:" + bases[i].id;
+      var label = document.createElement("span");
+      label.className = "programmer-label";
+      label.textContent = bases[i].label;
+      var value = document.createElement("span");
+      value.className = "programmer-value";
+      row.appendChild(label);
+      row.appendChild(value);
+      container.appendChild(row);
+      programmerRows.push({ base: bases[i].id, button: row, valueEl: value });
+    }
+  }
+
+  /* Most significant bit first, as the real app's bit panel reads. */
+  function renderProgrammerBits(container, width) {
+    programmerBits = [];
+    container.textContent = "";
+    for (var index = width - 1; index >= 0; index--) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "bit-key";
+      button.dataset.action = "bit:" + index;
+      button.setAttribute("aria-label", "Bit " + index);
+      container.appendChild(button);
+      programmerBits.push({ index: index, button: button });
+    }
+  }
+
+  function updateProgrammerPanel(container, calculator) {
+    for (var i = 0; i < programmerRows.length; i++) {
+      var row = programmerRows[i];
+      row.valueEl.textContent = calculator.baseValue(row.base);
+      row.button.setAttribute("aria-current", calculator.base === row.base ? "true" : "false");
+    }
+    for (var j = 0; j < programmerBits.length; j++) {
+      var bit = programmerBits[j];
+      var on = calculator.bitValue(bit.index) === 1;
+      bit.button.textContent = on ? "1" : "0";
+      bit.button.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+    var selectors = container.querySelectorAll(".memory-key");
+    for (var k = 0; k < selectors.length; k++) {
+      var action = selectors[k].dataset.action;
+      // The word-size button shows the size it will move on to, as the real
+      // app's single cycling button shows the current one.
+      if (action === "word:cycle") selectors[k].textContent = calculator.wordLabel();
+      applyPressed(selectors[k], action, calculator);
     }
   }
 
@@ -188,6 +309,30 @@
     var modeTitleEl = element("mode-title");
     var navButton = element("nav-button");
     var historyButton = element("history-button");
+    var programmerPanelEl = element("programmer-panel");
+    var programmerWordsEl = element("programmer-words");
+    var programmerShiftsEl = element("programmer-shifts");
+    var programmerReadoutEl = element("programmer-readout");
+    var programmerBitsEl = element("programmer-bits");
+    var programmerBitWidth = 0;
+
+    /* The panel is part of the Programmer mode only; the shell renders it from
+     * the mode's data and keeps the engine as the single source of values. */
+    function refreshProgrammer() {
+      var active = calculator.mode === "programmer";
+      programmerPanelEl.hidden = !active;
+      if (!active) {
+        programmerRows = [];
+        programmerBits = [];
+        programmerBitWidth = 0;
+        return;
+      }
+      if (programmerBitWidth !== calculator.wordWidth()) {
+        programmerBitWidth = calculator.wordWidth();
+        renderProgrammerBits(programmerBitsEl, programmerBitWidth);
+      }
+      updateProgrammerPanel(programmerPanelEl, calculator);
+    }
 
     var currentMode = "standard";
     var mode = NS.modes.standard;
@@ -208,6 +353,7 @@
       expressionEl.textContent = calculator.expression;
       fitDisplay(valueEl);
       applyKeypadState(calculator);
+      refreshProgrammer();
       var signature = calculator.history.length + ":" + calculator.memory + ":" + calculator.hasMemory;
       if (signature !== historySignature) {
         historySignature = signature;
@@ -240,6 +386,11 @@
         placeholderEl.hidden = false;
         placeholderTitleEl.textContent = modeTitle(id);
       }
+      if (definition && definition.words) {
+        renderProgrammerWordButton(programmerWordsEl);
+        renderProgrammerSelectors(programmerShiftsEl, definition.shifts, "shift");
+        renderProgrammerReadout(programmerReadoutEl, definition.bases);
+      }
       refresh();
     }
 
@@ -248,10 +399,17 @@
       if (key) press(key.dataset.action);
     });
 
+    /* The programmer panel's selectors, readout rows and bit keys carry
+     * engine actions too; they live outside the keypad grid. */
+    programmerPanelEl.addEventListener("click", function (event) {
+      var control = event.target.closest("[data-action]");
+      if (control && !control.disabled) press(control.dataset.action);
+    });
+
     historyListEl.addEventListener("click", function (event) {
       var item = event.target.closest(".history-item");
       if (item) {
-        calculator.setValue(parseFloat(item.dataset.value));
+        calculator.setValue(item.dataset.value);
         refresh();
       }
     });
