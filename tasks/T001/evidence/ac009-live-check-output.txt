@@ -1,0 +1,23 @@
+AC-009 live check — file:// (headless Chromium)
+policy:            fail on any console error, page error, or failed request; pass requires the app to boot
+=================================================
+date:              2026-09-10T16:26:10Z
+command:           node tasks/T001/evidence/ac009-live-check.mjs
+repo:              /home/hermes/projects/win-calc
+git head:          5c2d5c886675474d8e86f93212c171a60d4f8843
+git status:        clean
+page:              file:///home/hermes/projects/win-calc/index.html
+checker:           tasks/T001/evidence/ac009-live-check.mjs · node v24.21.0
+browser:           Google Chrome for Testing 151.0.7922.34 — /home/hermes/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome
+flags:             headless · fallback (--no-sandbox --disable-setuid-sandbox)
+-------------------------------------------------
+app:               title="Calculator" · #calc present · #value "0" · keypad keys 24
+requests:          6 seen: index.html, styles.css, format.js, engine.js, modes/standard.js, ui.js
+console errors:    0
+page errors:       0
+failed requests:   0
+browser-log errors:0
+-------------------------------------------------
+finished:          2026-09-10T16:26:12Z (2.1s)
+result: PASS
+EXIT_CODE=0
