@@ -315,15 +315,18 @@
   /* Drop a value straight into the display (history recall). History carries
    * the exact decimal text of the value, so a QWORD survives the round trip;
    * a value recorded by another mode may be fractional or in exponent form,
-   * and integer mode takes its truncation, as memory recall does. */
+   * and integer mode takes its truncation, as memory recall does.
+   *
+   * The conversion runs before any state changes: recall must never be able
+   * to clear the display and then fail, which would leave the engine and the
+   * screen disagreeing (F6). */
   Calculator.prototype.setValue = function (value) {
     var text = String(value);
+    var next = this.mode === "programmer"
+      ? progTrunc(this, progParse(10, progIntegerText(text)))
+      : Number(text);
     this.reset();
-    if (this.mode === "programmer") {
-      this.value = progTrunc(this, progParse(10, progIntegerText(text)));
-    } else {
-      this.value = Number(text);
-    }
+    this.value = next;
     this.operandReady = true;
   };
 
@@ -998,11 +1001,22 @@
     return BigInt(text);
   }
 
-  /* Decimal text for an integer parse: a whole number passes through (so a
-   * QWORD keeps every digit), anything else - a fraction or an exponent form
-   * recorded by another mode - is truncated toward zero. */
+  /* Decimal text for an integer parse. Every value the app's history can hold
+   * converts:
+   *   - whole-number text passes through untouched, so a QWORD recorded in
+   *     Programmer keeps every one of its digits;
+   *   - anything else goes through Number and then BigInt, which expands an
+   *     exponent form (String(1e21) is "1e+21") into exact digits instead of
+   *     handing the parser something it cannot read. A fraction truncates
+   *     toward zero, as memory recall does.
+   * Number() cannot fail on a string, and only a non-finite value has no
+   * integer form; the app records none, and such text becomes 0 rather than
+   * throwing inside the click path. */
   function progIntegerText(text) {
-    return /^-?\d+$/.test(text) ? text : String(Math.trunc(Number(text) || 0));
+    if (/^-?\d+$/.test(text)) return text;
+    var number = Number(text);
+    if (!isFinite(number)) return "0";
+    return BigInt(Math.trunc(number)).toString(10);
   }
 
   /* The value of a typed entry, sign included. */

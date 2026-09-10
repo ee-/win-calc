@@ -92,15 +92,15 @@
     return key;
   }
 
-  /* How a button reads its selected state: the active angle unit, base and
-   * shift mode, the 2nd toggle, and a set bit. The word-size control cycles
-   * rather than selecting (word:cycle), so it has no pressed state; actions
+  /* How a button reads its selected state: the active shift mode, the 2nd
+   * toggle, and a set bit. The word-size control cycles rather than selecting
+   * and the base rows mark the active base with aria-current (see
+   * renderProgrammerReadout), so neither has a pressed state here. Actions
    * without one return null and the attribute is dropped. */
   function pressedState(action, calculator) {
     var parts = String(action).split(":");
     switch (parts[0]) {
       case "angle": return calculator.angleUnit === parts[1].toUpperCase();
-      case "base": return calculator.base === parts[1];
       case "shift": return calculator.shiftMode === parts[1];
       case "second": return Boolean(calculator.second);
       case "bit": return calculator.bitValue(Number(parts[1])) === 1;
