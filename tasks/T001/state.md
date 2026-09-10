@@ -1,28 +1,43 @@
 # State — T001 win-calc
 
+Single source of truth for workflow state and design decisions. The Captain
+maintains the workflow sections; the Architect maintains the design sections.
+Updated at every stage transition.
+
+---
+
 ## Workflow State
 
-- Status: DESIGNED
+- Status: IMPLEMENTED — WO-1 delivered at `bc84a80`; WO-2..WO-7 pending
 - Complexity: L3
 - Architecture effort: high
 - Rework cycle: 0
+- Fallback used: no
 - Base branch: main
-- Base commit: recorded at the contract commit (this commit)
+- Base commit: 8d5f2d4
 - Working branch: main
-- Working tree: clean
+- Head commit (current): `bc84a80` — WO-1; pipeline-artifact commits (contract freeze, evidence, review) follow on main
+- Diff range (base → head): `8d5f2d4..bc84a80` (WO-1)
+- Working tree: clean at verification time (2026-09-10T15:58Z; no changes in `git status -sb`); artifact commits added after
 
 ### Stage Log
 
-- [x] Stage 0 Preflight — repo created, base commit recorded
-- [x] Stage 1 Scope — task.md written, **G0 approved by owner**
+- [x] Stage 0 Preflight — repo located, baseline recorded
+- [x] Stage 1 Scope — `task.md` frozen 2026-09-10; **G0 approval recorded** (Amendment A-001); the earlier approval entry was corrected — it predated the approval
 - [x] Stage 2 Design — below
 - [x] Stage 3 Decompose — below
-- [ ] Stage 4 Implement — WO-1..
-- [ ] Stage 5 Verify — **G2**
-- [ ] Stage 6 Review — `review.md`, **G3**
-- [ ] Stage 7 Finalize — **G5**, **G6**
+- [ ] Stage 4 Implement — WO-1 delivered (`bc84a80`); WO-2..WO-7 pending
+- [ ] Stage 5 Verify — WO-1 verified (G2 record below); WO-2..WO-7 pending
+- [ ] Stage 6 Review — WO-1 review pending; WO-2..WO-7 pending
+- [ ] Stage 7 Finalize — **G5**, then owner acceptance **G6**
+
+---
 
 ## Architecture
+
+> Captain note (2026-09-10): the CON-001 question raised below was resolved at
+> G0 — the implementation ships a classic `<script>`, no modules, no
+> `serve.js`; CON-001 holds literally. See Open Questions.
 
 ### System Understanding
 
@@ -93,8 +108,12 @@ implementation and nothing else.
 
 ### Open Questions
 
-- CON-001 vs module scripts (above) — implementation proceeds with a classic
-  script, which satisfies the constraint as written.
+- **Resolved (2026-09-10):** CON-001 vs module scripts — the implementation
+  uses a classic `<script>` with no modules, so the constraint holds literally
+  (no server required; `file://` works). No `serve.js`. No open questions for
+  WO-1.
+
+---
 
 ## Work Orders
 
@@ -108,11 +127,44 @@ implementation and nothing else.
 | WO-6 | Graphing | AC-007 | `node --test` (mapping) + screenshot | WO-1 |
 | WO-7 | Visual polish, themes, screenshots | AC-008 | screenshots | WO-2..WO-6 |
 
+Milestones (owner, 2026-09-10): M1..M7 in this order — M1 = WO-1; Scientific
+(M2) before Graphing (M6). Every criterion is served by at least one work
+order; every work order serves at least one criterion.
+
+---
+
 ## Verification Record
 
-(empty — filled at Stage 5)
+One block per Tester run:
+
+```text
+commit:            bc84a80238b33c4aebe1068e2c20e3edec5da615
+working directory: /home/hermes/projects/win-calc
+command:           export PATH="$HOME/.local/bin:$PATH"
+                   node --test
+environment:       host hermes-agent-2 · Linux 6.8.0-139-generic x86_64 · user hermes
+                   node v24.21.0 — /home/hermes/.local/bin/node (symlink to /home/hermes/.hermes/node/bin/node)
+                   working tree clean at run (git status -sb: `## main...origin/main`, no changes)
+started at:        2026-09-10T15:58:01Z
+finished at:       2026-09-10T15:58:01Z
+exit code:         0
+result:            tests 42 · pass 42 · fail 0 · cancelled 0 · skipped 0 · todo 0
+log path:          tasks/T001/evidence/g2-node-test-output.txt
+```
+
+Full record: `tasks/T001/evidence/g2-verification.md`.
+
+---
 
 ## Handoff Notes
 
 - Executor: OMP on this host, roles from `~/.omp/agent/config.yml`.
 - Standing constraints: `~/.omp/agent/RULES.md`.
+- Evidence: `tasks/T001/evidence/` (owner decision, 2026-09-10); reviewer inputs in `evidence/g3/`.
+- Reproducibility: `node` is provided by `$HOME/.local/bin` (symlink to
+  `~/.hermes/node/bin/node`); PATH is set only for login/interactive shells
+  (`~/.profile`, `~/.bashrc`). Non-interactive runs must
+  `export PATH="$HOME/.local/bin:$PATH"` first. See
+  `evidence/g2-node-path-demo.txt`.
+- Artifact commits after `bc84a80` are pipeline bookkeeping (contract freeze,
+  evidence, review); product code is unchanged since `bc84a80`.
