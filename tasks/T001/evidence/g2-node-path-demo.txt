@@ -1,5 +1,0 @@
-2026-09-10T16:00:07Z
-command: PATH=/usr/bin:/bin node --version
-/usr/bin/bash: line 5: node: command not found
-exit=127
-note: node is provided only via /home/hermes/.local/bin (symlink to /home/hermes/.hermes/node/bin/node); PATH additions: ~/.profile:25-26, ~/.bashrc:120 (login/interactive shells).
