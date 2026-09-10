@@ -581,6 +581,107 @@ test("a history value recorded by another mode lands exactly", () => {
   assert.equal(scientific.display, "0.0001");
 });
 
+test("a Standard exponent-form result recalls into Programmer", () => {
+  // 100,000,000,000 x 100,000,000,000 = 1e22, whose recorded value is a
+  // Number and whose text is therefore exponent form: "1e+22".
+  const standard = new Calculator();
+  press(standard, "1" + ",0".repeat(11) + ",op:mul,1" + ",0".repeat(11) + ",equals");
+  assert.equal(standard.display, "1.e+22");
+  assert.equal(standard.history.length, 1);
+  assert.equal(String(standard.history[0].value), "1e+22", "the recorded text is exponent form");
+
+  // The history click hands the entry's value text to the engine.
+  const calc = prog();
+  calc.setValue(String(standard.history[0].value));
+  assert.equal(calc.value, 1864712049423024128n, "the exponent expands exactly, then bounds to QWORD");
+  assert.equal(calc.display, "1,864,712,049,423,024,128");
+  assert.equal(calc.baseValue("hex"), "19E0 C9BA B240 0000");
+
+  // A negative exponent-form value expands the same way and keeps the
+  // two's-complement pattern the mode stores.
+  const negative = prog();
+  negative.setValue("-1e+22");
+  assert.equal(negative.value, 16582032024286527488n, "the QWORD pattern of -1e22");
+  assert.equal(negative.display, "-1,864,712,049,423,024,128");
+  assert.equal(negative.baseValue("hex"), "E61F 3645 4DC0 0000");
+
+  // A small exponent form is a fraction and truncates to zero.
+  const small = prog();
+  small.setValue("1e-7");
+  assert.equal(small.value, 0n);
+  assert.equal(small.display, "0");
+});
+
+test("recall never leaves the display and the engine disagreeing", () => {
+  // Every shape here is text the app itself can put in a history entry, or
+  // the display text of one: after recall the display must be a faithful
+  // rendering of the engine's value, and the next operation must continue
+  // from what is shown. Before the exponent fix these threw after the engine
+  // had already been cleared, leaving the screen stale against a zero engine.
+  const shapes = [
+    "1e+22", "-1e+22", "1e+21", "100000000000000000000",
+    "1.7976931348623157e+308", "0.5", "-0.5", "1e-7", "abc", ""
+  ];
+  for (const text of shapes) {
+    const calc = prog();
+    calc.setValue(text); // must not throw, whatever the text
+    const before = BigInt(calc.display.replace(/,/g, ""));
+
+    calc.press("op:add");
+    calc.press("digit:1");
+    calc.press("equals");
+    const after = BigInt(calc.display.replace(/,/g, ""));
+    assert.equal(after, before + 1n, JSON.stringify(text) + ": +1= continues from the display");
+  }
+
+  // The recalled display is the value's own rendering, not a stale one.
+  const calc = prog();
+  calc.setValue("1e+22");
+  assert.equal(calc.value, 1864712049423024128n);
+  assert.equal(calc.display, "1,864,712,049,423,024,128");
+  assert.equal(calc.baseValue("oct"), "147 406 233 526 220 000 000");
+  calc.press("clear");
+  assert.equal(calc.display, "0");
+});
+
+test("history text the app cannot record still recalls to a defined value", () => {
+  // The app records only finite results, so these cannot arrive from a
+  // history row; a malformed value must still not throw.
+  for (const text of ["Infinity", "-Infinity", "NaN", "null", " ", "1,000"]) {
+    const calc = prog();
+    calc.setValue(text);
+    assert.equal(calc.display, "0", JSON.stringify(text));
+    assert.equal(calc.value, 0n);
+  }
+
+  // A value that exceeds the widest word keeps the low bits of the pattern;
+  // it never vanishes or throws. [INFERENCE] - see the receipt: the engine
+  // masks on every display update and memory recall truncates, while the real
+  // app's paste path reports "Invalid input" for an out-of-range value.
+  const byte = prog();
+  press(byte, "word:cycle,word:cycle,word:cycle");
+  byte.setValue("1e+22");
+  assert.equal(byte.value, 0n, "the low bits of 1e22 are zero");
+  byte.press("word:cycle");
+  assert.equal(byte.wordSize, "qword");
+
+  const dword = prog();
+  press(dword, "word:cycle");
+  dword.setValue("1e+22");
+  assert.equal(dword.value, 2990538752n, "0xB2400000 as an unsigned DWORD pattern");
+  assert.equal(dword.display, "-1,304,428,544", "read signed in DEC");
+  assert.equal(dword.baseValue("hex"), "B240 0000");
+
+  const decimal = prog();
+  decimal.setValue("12345678901234567890");
+  assert.equal(decimal.display, "-6,101,065,172,474,983,726", "the high bit reads as the sign");
+  assert.equal(decimal.baseValue("hex"), "AB54 A98C EB1F 0AD2");
+  press(decimal, "word:cycle,word:cycle,word:cycle");
+  assert.equal(decimal.wordSize, "byte");
+  assert.equal(decimal.baseValue("hex"), "D2", "BYTE keeps the low bits");
+  assert.equal(decimal.display, "-46", "and reads them signed in DEC");
+});
+
 test("switching modes leaves Standard and Scientific untouched", () => {
   const calc = new Calculator();
   assert.equal(press(calc, "1,op:add,2,op:mul,3,equals"), "9", "Standard stays left to right");
