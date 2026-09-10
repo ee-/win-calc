@@ -41,7 +41,9 @@
     divideByZero: "Cannot divide by zero",
     undefined: "Result is undefined",
     invalidInput: "Invalid input",
-    overflow: "Overflow"
+    overflow: "Overflow",
+    // Programmer: a shift by the whole word width (CALC_E_NORESULT).
+    resultNotDefined: "Result not defined"
   };
 
   function Calculator() {
@@ -51,23 +53,35 @@
     this.memory = 0;
     this.hasMemory = false;
     this.history = [];
-    this.mode = "standard"; // "standard" | "scientific" - see setMode
+    this.mode = "standard"; // "standard" | "scientific" | "programmer" - see setMode
     this.second = false;    // Scientific's 2nd toggle (inverse labels)
+    this.base = "dec";      // Programmer's active base: hex | dec | oct | bin
+    this.wordSize = "qword"; // Programmer's width: qword | dword | word | byte
+    this.shiftMode = "arithmetic"; // Programmer's Lsh/Rsh behaviour
     this.reset();
   }
 
-  /* Switch evaluation machinery. Memory, history and the displayed value
-   * survive the switch, as they do in the real app; the in-progress
-   * expression does not. Only Scientific evaluates expressions, so any other
-   * mode id (the unimplemented ones) runs the Standard machine. */
+  /* Switch evaluation machinery. Memory and history survive the switch, as
+   * they do in the real app. Scientific keeps the displayed value; entering
+   * Programmer resets the base, the word size and the display, which is what
+   * the real app's SetProgrammerMode does (DEC + Clear, QWORD). */
   Calculator.prototype.setMode = function (mode) {
-    var next = mode === "scientific" ? "scientific" : "standard";
+    var next = mode === "scientific" ? "scientific"
+      : mode === "programmer" ? "programmer"
+      : "standard";
     if (next === this.mode) return;
     var value = this.currentValue();
     this.mode = next;
     this.second = false;
+    if (next === "programmer") {
+      this.base = "dec";
+      this.wordSize = "qword";
+      this.shiftMode = "arithmetic";
+      this.reset();
+      return;
+    }
     this.reset();
-    this.value = value;
+    this.value = typeof value === "bigint" ? Number(value) : value;
   };
 
   /* C: the whole pending operation goes, memory and history stay. */
@@ -81,11 +95,13 @@
     this.lastOperand = null;
     this.error = null;
     if (this.mode === "scientific") sciReset(this);
+    else if (this.mode === "programmer") progReset(this);
   };
 
   Object.defineProperty(Calculator.prototype, "display", {
     get: function () {
       if (this.error) return this.error;
+      if (this.mode === "programmer") return progDisplay(this, this.base, this.value);
       if (this.entry !== null) {
         return this.mode === "scientific" ? sciEntryText(this.entry) : format.formatEntry(this.entry);
       }
@@ -98,12 +114,14 @@
     get: function () {
       if (this.error) return "";
       if (this.mode === "scientific") return sciExpression(this);
+      if (this.mode === "programmer") return progExpression(this);
       if (this.pendingOp === null) return "";
       return format.formatNumber(this.accumulator) + " " + OPERATORS[this.pendingOp].symbol;
     }
   });
 
   Calculator.prototype.currentValue = function () {
+    if (this.mode === "programmer") return this.value;
     return this.entry === null ? this.value : parseFloat(this.entry);
   };
 
@@ -294,10 +312,21 @@
     this.history.length = 0;
   };
 
-  /* Drop a value straight into the display (history recall). */
+  /* Drop a value straight into the display (history recall). History carries
+   * the exact decimal text of the value, so a QWORD survives the round trip;
+   * a value recorded by another mode may be fractional or in exponent form,
+   * and integer mode takes its truncation, as memory recall does.
+   *
+   * The conversion runs before any state changes: recall must never be able
+   * to clear the display and then fail, which would leave the engine and the
+   * screen disagreeing (F6). */
   Calculator.prototype.setValue = function (value) {
+    var text = String(value);
+    var next = this.mode === "programmer"
+      ? progTrunc(this, progParse(10, progIntegerText(text)))
+      : Number(text);
     this.reset();
-    this.value = value;
+    this.value = next;
     this.operandReady = true;
   };
 
@@ -859,15 +888,24 @@
     var parts = action.split(":");
     var kind = parts[0];
     if (SIMPLE_ACTIONS.indexOf(kind) !== -1) return parts.length === 1;
-    if (kind === "digit") return /^[0-9]$/.test(parts[1]);
-    if (kind === "op") return Object.prototype.hasOwnProperty.call(OPERATORS, parts[1]);
+    if (kind === "digit") return /^[0-9a-fA-F]$/.test(parts[1]);
+    if (kind === "op") {
+      return Object.prototype.hasOwnProperty.call(OPERATORS, parts[1]) ||
+        Object.prototype.hasOwnProperty.call(PROGRAMMER_APPLY, parts[1]);
+    }
     if (kind === "unary") {
-      return parts[1] === "negate" || Object.prototype.hasOwnProperty.call(FUNCTIONS, parts[1]);
+      return parts[1] === "negate" || parts[1] === "not" ||
+        Object.prototype.hasOwnProperty.call(ROTATES, parts[1]) ||
+        Object.prototype.hasOwnProperty.call(FUNCTIONS, parts[1]);
     }
     if (kind === "const") return parts[1] === "pi" || parts[1] === "e";
     if (kind === "paren") return parts[1] === "open" || parts[1] === "close";
     if (kind === "entry") return parts[1] === "exp";
     if (kind === "angle") return ANGLE_UNITS.indexOf(String(parts[1]).toUpperCase()) !== -1;
+    if (kind === "base") return Object.prototype.hasOwnProperty.call(BASE_RADIX, parts[1]);
+    if (kind === "word") return parts[1] === "cycle";
+    if (kind === "shift") return SHIFT_MODES.indexOf(parts[1]) !== -1;
+    if (kind === "bit") return /^\d{1,2}$/.test(parts[1]) && Number(parts[1]) < 64;
     if (kind === "memory") return ["clear", "recall", "add", "subtract", "store"].indexOf(parts[1]) !== -1;
     return false;
   };
@@ -881,6 +919,10 @@
       if (SIMPLE_ACTIONS.indexOf(kind) === -1 && kind !== "digit") return;
       this.reset();
     }
+    if (this.mode === "programmer") {
+      progPress(this, kind, parts[1]);
+      return;
+    }
     if (this.mode === "scientific") {
       sciPress(this, kind, parts[1]);
       return;
@@ -891,7 +933,577 @@
 
   Calculator.prototype.angleUnit = "DEG";
 
+  /* --- Programmer mode ----------------------------------------------------
+   * The real app's Programmer mode, following its public source
+   * (github.com/microsoft/calculator; the receipt's Source / Semantic
+   * Evidence section carries the citations):
+   *   - the value is the width-bounded two's-complement bit pattern, held as
+   *     BigInt so QWORD stays exact; HEX, OCT and BIN read the pattern raw,
+   *     DEC reads it signed (scicomm.cpp GetStringForDisplay)
+   *   - immediate execution under the engine's precedence table: OR/XOR 0,
+   *     AND/NAND/NOR 1, + and - 2, the shifts, Mod, x and / 3
+   *     (scicomm.cpp NPrecedenceOfOp)
+   *   - a shift by the whole word width is the "Result not defined" error
+   *     (CALC_E_NORESULT, scioper.cpp)
+   *   - the four rotate keys rotate exactly one bit; the through-carry pair
+   *     keeps a carry bit that only C clears (scifunc.cpp, scicomm.cpp)
+   *   - DEC input stops at the signed maximum, the other bases at the
+   *     pattern's limit (sciset.cpp UpdateMaxIntDigits, CalcInput.cpp)
+   *   - digits group every 3 (DEC, OCT) or 4 (HEX, BIN), and the binary
+   *     readout is padded to a whole nibble (scidisp.cpp GroupDigitsPerRadix,
+   *     StandardCalculatorViewModel.AddPadding)
+   */
+
+  var WORD_BITS = { qword: 64, dword: 32, word: 16, byte: 8 };
+  var WORD_ORDER = ["qword", "dword", "word", "byte"];
+  var BASE_RADIX = { hex: 16, dec: 10, oct: 8, bin: 2 };
+  var SHIFT_MODES = ["arithmetic", "logical", "rotate", "rotateCarry"];
+
+  /* The programmer operators and the precedence the real engine gives them
+   * (scicomm.cpp NPrecedenceOfOp); all of them bind left to right. */
+  var PROGRAMMER_SYMBOLS = {
+    add: "+", sub: "\u2212", mul: "\u00d7", div: "\u00f7", mod: "%",
+    and: "AND", or: "OR", xor: "XOR", nand: "NAND", nor: "NOR",
+    lsh: "Lsh", rsh: "Rsh"
+  };
+
+  var PROGRAMMER_PRECEDENCE = {
+    or: 0, xor: 0, and: 1, nand: 1, nor: 1,
+    add: 2, sub: 2, mul: 3, div: 3, mod: 3, lsh: 3, rsh: 3
+  };
+
+  /* The one-bit rotations are unary keys, not operators. The real engine
+   * renders the through-carry pair with the same symbol as the circular pair
+   * in its expression string ("RoR(RoR(1))" for two Rorc presses). */
+  var ROTATES = {
+    rol: { symbol: "RoL", left: true },
+    ror: { symbol: "RoR", left: false },
+    rolc: { symbol: "RoL", left: true },
+    rorc: { symbol: "RoR", left: false }
+  };
+
+  function progWidth(calc) { return WORD_BITS[calc.wordSize]; }
+  function progMask(calc) { return (1n << BigInt(progWidth(calc))) - 1n; }
+  function progTrunc(calc, value) { return value & progMask(calc); }
+
+  /* The signed reading of the pattern: what DEC displays, and what division,
+   * modulo and the arithmetic shift operate on. */
+  function progSigned(calc, value) {
+    var width = BigInt(progWidth(calc));
+    return (value & (1n << (width - 1n))) ? value - (1n << width) : value;
+  }
+
+  function progParse(radix, text) {
+    if (text === "") return 0n;
+    if (radix === 16) return BigInt("0x" + text);
+    if (radix === 8) return BigInt("0o" + text);
+    if (radix === 2) return BigInt("0b" + text);
+    return BigInt(text);
+  }
+
+  /* Decimal text for an integer parse. Every value the app's history can hold
+   * converts:
+   *   - whole-number text passes through untouched, so a QWORD recorded in
+   *     Programmer keeps every one of its digits;
+   *   - anything else goes through Number and then BigInt, which expands an
+   *     exponent form (String(1e21) is "1e+21") into exact digits instead of
+   *     handing the parser something it cannot read. A fraction truncates
+   *     toward zero, as memory recall does.
+   * Number() cannot fail on a string, and only a non-finite value has no
+   * integer form; the app records none, and such text becomes 0 rather than
+   * throwing inside the click path. */
+  function progIntegerText(text) {
+    if (/^-?\d+$/.test(text)) return text;
+    var number = Number(text);
+    if (!isFinite(number)) return "0";
+    return BigInt(Math.trunc(number)).toString(10);
+  }
+
+  /* The value of a typed entry, sign included. */
+  function progEntryValue(calc, text) {
+    var negative = text.charAt(0) === "-";
+    var body = negative ? text.slice(1) : text;
+    if (body === "") return 0n;
+    var value = progParse(BASE_RADIX[calc.base], body);
+    return negative ? progTrunc(calc, -value) : value;
+  }
+
+  function progRawTextFor(calc, base, value) {
+    if (base === "dec") return progSigned(calc, value).toString(10);
+    return value.toString(BASE_RADIX[base]).toUpperCase();
+  }
+
+  function progRawText(calc, value) {
+    return progRawTextFor(calc, calc.base, value);
+  }
+
+  /* Digits group from the right: DEC and OCT every 3, HEX and BIN every 4,
+   * separated by a space. */
+  function progGroupDigits(text, size) {
+    var parts = [];
+    for (var end = text.length; end > 0; end -= size) {
+      parts.unshift(text.slice(Math.max(0, end - size), end));
+    }
+    return parts.join(" ");
+  }
+
+  /* The display text for a base: DEC keeps the sign and groups with commas;
+   * the binary row is padded to a whole nibble first. */
+  function progDisplay(calc, base, value) {
+    var text = progRawTextFor(calc, base, value);
+    if (base === "dec") return format.groupIntegerPart(text);
+    if (base === "bin" && value > 0n) {
+      while (text.length % 4 !== 0) text = "0" + text;
+      return progGroupDigits(text, 4);
+    }
+    return progGroupDigits(text, base === "hex" ? 4 : 3);
+  }
+
+  /* A digit this base accepts: BIN takes 0-1, OCT 0-7, DEC 0-9, HEX 0-9 and
+   * A-F. The shell dims the keys the same rule rejects. */
+  function progDigitValue(calc, digit) {
+    var value = parseInt(digit, 16);
+    return value < BASE_RADIX[calc.base] ? value : -1;
+  }
+
+  /* DEC input stops at the signed maximum (2^(w-1)-1, or 2^(w-1) for a
+   * negative entry); every other base stops at the pattern's limit. */
+  function progInputLimit(calc) {
+    if (calc.base !== "dec") return progMask(calc);
+    var half = 1n << BigInt(progWidth(calc) - 1);
+    return calc.entry !== null && calc.entry.charAt(0) === "-" ? half : half - 1n;
+  }
+
+  function progReset(calc) {
+    calc.value = 0n;
+    calc.entry = null;
+    calc.operandText = null;
+    calc.tokens = [];      // the expression line's record
+    calc.opStack = [];     // pending operators, resolved by precedence
+    calc.valStack = [];    // committed operands
+    calc.lastExpr = "";
+    calc.lastOp = null;
+    calc.lastOperand = null;
+    calc.lastCommitted = null;
+    calc.completed = false;
+    calc.carry = 0;        // only C clears the rotate carry, as in the real app
+    // The cleared display holds 0, which the next operator takes as its
+    // operand - as the real app does after C.
+    calc.operandReady = true;
+  }
+
+  function progFail(calc, message) {
+    var carry = calc.carry;
+    calc.fail(message);
+    progReset(calc);
+    calc.carry = carry;    // an error is not C, so the carry survives
+  }
+
+  /* --- the integer operations --- */
+
+  function progDivide(calc, a, b) {
+    if (b === 0n) return { error: a === 0n ? ERRORS.undefined : ERRORS.divideByZero };
+    // C#'s integer division truncates toward zero, and so does BigInt.
+    return { value: progTrunc(calc, progSigned(calc, a) / progSigned(calc, b)) };
+  }
+
+  function progModulo(calc, a, b) {
+    if (b === 0n) return { error: ERRORS.undefined };
+    // C#'s remainder takes the sign of the dividend, and so does BigInt.
+    return { value: progTrunc(calc, progSigned(calc, a) % progSigned(calc, b)) };
+  }
+
+  /* Lsh / Rsh. The count is the operator's right operand; a shift by the
+   * whole word width is the real app's "Result not defined" error. Logical
+   * mode fills with zeros, otherwise the sign bit propagates. */
+  function progShift(calc, left, value, count) {
+    var width = BigInt(progWidth(calc));
+    var distance = count < 0n ? -count : count;
+    if (distance >= width) return { error: ERRORS.resultNotDefined };
+    if (left) return { value: progTrunc(calc, value << distance) };
+    if (calc.shiftMode === "logical") return { value: value >> distance };
+    return { value: progTrunc(calc, progSigned(calc, value) >> distance) };
+  }
+
+  var PROGRAMMER_APPLY = {
+    add: function (calc, a, b) { return { value: progTrunc(calc, a + b) }; },
+    sub: function (calc, a, b) { return { value: progTrunc(calc, a - b) }; },
+    mul: function (calc, a, b) { return { value: progTrunc(calc, a * b) }; },
+    div: progDivide,
+    mod: progModulo,
+    and: function (calc, a, b) { return { value: a & b }; },
+    or: function (calc, a, b) { return { value: a | b }; },
+    xor: function (calc, a, b) { return { value: a ^ b }; },
+    nand: function (calc, a, b) { return { value: progTrunc(calc, ~(a & b)) }; },
+    nor: function (calc, a, b) { return { value: progTrunc(calc, ~(a | b)) }; },
+    lsh: function (calc, a, b) { return progShift(calc, true, a, b); },
+    rsh: function (calc, a, b) { return progShift(calc, false, a, b); }
+  };
+
+  function progApply(calc, op, a, b) {
+    var apply = PROGRAMMER_APPLY[op];
+    return apply ? apply(calc, a, b) : { error: ERRORS.invalidInput };
+  }
+
+  /* The real app's logical right shift is its own key, RshL. */
+  function progSymbol(calc, op) {
+    if (op === "rsh" && calc.shiftMode === "logical") return "RshL";
+    return PROGRAMMER_SYMBOLS[op] || op;
+  }
+
+  /* --- the expression: a token list for display, stacks for evaluation --- */
+
+  function progIsOperator(token) {
+    return PROGRAMMER_PRECEDENCE[token] !== undefined;
+  }
+
+  function progRender(calc) {
+    var text = "";
+    for (var i = 0; i < calc.tokens.length; i++) {
+      if (i > 0) text += " ";
+      text += progIsOperator(calc.tokens[i]) ? progSymbol(calc, calc.tokens[i]) : calc.tokens[i];
+    }
+    // A dangling operator keeps its trailing space, as the real app shows.
+    if (text !== "" && progIsOperator(calc.tokens[calc.tokens.length - 1])) text += " ";
+    return text;
+  }
+
+  /* The expression line: the committed tokens, plus a computed operand the
+   * current key is about to consume ("RoL(1)"). A typed entry stays off this
+   * line, as it does in the real app. */
+  function progExpression(calc) {
+    if (calc.completed) return calc.lastExpr;
+    var text = progRender(calc);
+    if (calc.operandText !== null) {
+      text += text === "" || text.charAt(text.length - 1) === " " ? "" : " ";
+      text += calc.operandText;
+    }
+    return text;
+  }
+
+  /* The operand the expression is waiting for: the typed entry, a computed
+   * value's text, or the displayed value. */
+  function progOperand(calc) {
+    if (calc.entry !== null) return calc.entry;
+    if (calc.operandText !== null) return calc.operandText;
+    return progRawText(calc, calc.value);
+  }
+
+  /* Whether the display holds an operand the next operator can consume. It is
+   * false only right after an operator (or a clear), when the display still
+   * shows the operand that operator was given. */
+  function progHasOperand(calc) {
+    return calc.operandReady;
+  }
+
+  function progReduce(calc) {
+    var op = calc.opStack.pop();
+    var right = calc.valStack.pop();
+    var left = calc.valStack.pop();
+    var outcome = progApply(calc, op, left, right);
+    if (outcome.error) return outcome;
+    calc.valStack.push(outcome.value);
+    calc.value = outcome.value;
+    return outcome;
+  }
+
+  /* Commit the operand being typed, if any, and its expression text. */
+  function progCommit(calc) {
+    if (!progHasOperand(calc)) return;
+    calc.valStack.push(calc.value);
+    calc.tokens.push(progOperand(calc));
+    calc.lastCommitted = calc.value;
+    calc.entry = null;
+    calc.operandText = null;
+    calc.operandReady = false;
+  }
+
+  function progSetOperator(calc, op) {
+    calc.completed = false;
+    calc.lastExpr = "";
+    if (!progHasOperand(calc) && progIsOperator(calc.tokens[calc.tokens.length - 1])) {
+      // An operator pressed twice replaces the pending one.
+      calc.tokens.pop();
+      calc.opStack.pop();
+    } else {
+      progCommit(calc);
+    }
+    while (calc.opStack.length &&
+      PROGRAMMER_PRECEDENCE[calc.opStack[calc.opStack.length - 1]] >= PROGRAMMER_PRECEDENCE[op]) {
+      var outcome = progReduce(calc);
+      if (outcome.error) {
+        progFail(calc, outcome.error);
+        return;
+      }
+    }
+    calc.opStack.push(op);
+    calc.tokens.push(op);
+    calc.operandReady = false;
+  }
+
+  function progRecord(calc, text) {
+    calc.history.push({
+      expression: text,
+      result: progDisplay(calc, calc.base, calc.value),
+      // The exact signed decimal text, so recall works whatever base was
+      // active when the calculation was recorded (see setValue).
+      value: progSigned(calc, calc.value).toString(10)
+    });
+  }
+
+  function progEquals(calc) {
+    if (!calc.tokens.length) {
+      // Nothing pending: repeat the last operation on the displayed value,
+      // as Standard does after a fresh number.
+      if (calc.lastOp === null) return;
+      var baseText = progRawText(calc, calc.value);
+      var operandText = progRawText(calc, calc.lastOperand);
+      var repeat = progApply(calc, calc.lastOp, calc.value, calc.lastOperand);
+      if (repeat.error) {
+        progFail(calc, repeat.error);
+        return;
+      }
+      calc.value = repeat.value;
+      calc.lastExpr = baseText + " " + progSymbol(calc, calc.lastOp) + " " + operandText + "=";
+      calc.entry = null;
+      calc.operandText = null;
+      calc.completed = true;
+      calc.operandReady = true;
+      progRecord(calc, calc.lastExpr);
+      return;
+    }
+    if (!progHasOperand(calc) && progIsOperator(calc.tokens[calc.tokens.length - 1])) {
+      // "2 + =" uses the displayed value as the right operand.
+      calc.entry = progRawText(calc, calc.value);
+      calc.operandReady = true;
+    }
+    progCommit(calc);
+    while (calc.opStack.length) {
+      var outcome = progReduce(calc);
+      if (outcome.error) {
+        progFail(calc, outcome.error);
+        return;
+      }
+    }
+    var lastOp = null;
+    for (var i = calc.tokens.length - 1; i >= 0; i--) {
+      if (progIsOperator(calc.tokens[i])) {
+        lastOp = calc.tokens[i];
+        break;
+      }
+    }
+    var text = progRender(calc) + "=";
+    calc.lastOp = lastOp;
+    calc.lastOperand = lastOp === null ? null : calc.lastCommitted;
+    calc.lastExpr = text;
+    calc.tokens = [];
+    calc.opStack = [];
+    calc.valStack = [];
+    calc.entry = null;
+    calc.operandText = null;
+    calc.completed = true;
+    calc.operandReady = true;
+    progRecord(calc, text);
+  }
+
+  /* --- entry, unary keys and the mode's selectors --- */
+
+  function progStartExpression(calc) {
+    calc.tokens = [];
+    calc.opStack = [];
+    calc.valStack = [];
+    calc.lastExpr = "";
+    calc.completed = false;
+  }
+
+  function progInputDigit(calc, digit) {
+    if (calc.completed) progStartExpression(calc);
+    if (progDigitValue(calc, digit) === -1) return;
+    var negative = calc.entry !== null && calc.entry.charAt(0) === "-";
+    var body = calc.entry === null ? "" : (negative ? calc.entry.slice(1) : calc.entry);
+    body = body === "0" ? "" : body;
+    var candidate = body + digit.toUpperCase();
+    if (progParse(BASE_RADIX[calc.base], candidate) > progInputLimit(calc)) return;
+    calc.entry = (negative ? "-" : "") + candidate;
+    calc.value = progEntryValue(calc, calc.entry);
+    calc.operandText = null;
+    calc.operandReady = true;
+  }
+
+  function progBackspace(calc) {
+    if (calc.entry === null) return; // results are not editable
+    var next = calc.entry.slice(0, -1);
+    if (next === "" || next === "-") {
+      calc.entry = null;
+      calc.value = 0n;
+      return;
+    }
+    calc.entry = next;
+    calc.value = progEntryValue(calc, next);
+  }
+
+  function progClearEntry(calc) {
+    calc.entry = null;
+    calc.operandText = null;
+    calc.value = 0n;
+    calc.operandReady = true; // the cleared 0 is an operand, as after C
+  }
+
+  /* +/- toggles a typed entry's sign (the real app's TryToggleSign) and
+   * negates a computed value. */
+  function progNegate(calc) {
+    if (calc.entry !== null) {
+      calc.entry = calc.entry.charAt(0) === "-" ? calc.entry.slice(1) : "-" + calc.entry;
+      calc.value = progEntryValue(calc, calc.entry);
+      return;
+    }
+    calc.value = progTrunc(calc, -calc.value);
+    calc.operandText = null;
+    calc.operandReady = true;
+  }
+
+  /* NOT is the width-bounded complement (IDC_COM). */
+  function progNot(calc) {
+    var text = progOperand(calc);
+    calc.value = progTrunc(calc, ~calc.value);
+    calc.entry = null;
+    calc.operandText = "Not(" + text + ")";
+    calc.operandReady = true;
+  }
+
+  /* The rotate keys turn the value by exactly one bit; the through-carry pair
+   * threads the sticky carry bit through the vacated end. */
+  function progRotate(calc, kind) {
+    var rotate = ROTATES[kind];
+    var width = BigInt(progWidth(calc));
+    var text = progOperand(calc);
+    var bit;
+    if (rotate.left) {
+      bit = Number((calc.value >> (width - 1n)) & 1n);
+      calc.value = progTrunc(calc, (calc.value << 1n) | BigInt(kind === "rolc" ? calc.carry : bit));
+    } else {
+      bit = Number(calc.value & 1n);
+      calc.value = (calc.value >> 1n) |
+        (BigInt(kind === "rorc" ? calc.carry : bit) << (width - 1n));
+    }
+    if (kind === "rolc" || kind === "rorc") calc.carry = bit;
+    calc.entry = null;
+    calc.operandText = rotate.symbol + "(" + text + ")";
+    calc.operandReady = true;
+  }
+
+  function progSetBase(calc, base) {
+    if (!Object.prototype.hasOwnProperty.call(BASE_RADIX, base)) return;
+    calc.base = base;
+    calc.entry = null;     // the typed text was in the old base; the value stands
+    calc.operandText = null;
+  }
+
+  /* The word-size button cycles QWORD -> DWORD -> WORD -> BYTE -> QWORD, as
+   * the real app's single button does. The value keeps its low bits. */
+  function progCycleWordSize(calc) {
+    calc.wordSize = WORD_ORDER[(WORD_ORDER.indexOf(calc.wordSize) + 1) % WORD_ORDER.length];
+    calc.entry = null;
+    calc.operandText = null;
+    calc.value = progTrunc(calc, calc.value);
+    for (var i = 0; i < calc.valStack.length; i++) calc.valStack[i] = progTrunc(calc, calc.valStack[i]);
+  }
+
+  function progSetShiftMode(calc, mode) {
+    if (SHIFT_MODES.indexOf(mode) === -1) return;
+    calc.shiftMode = mode;
+  }
+
+  function progToggleBit(calc, index) {
+    if (!(index >= 0 && index < progWidth(calc))) return;
+    calc.entry = null;
+    calc.operandText = null;
+    calc.value = progTrunc(calc, calc.value ^ (1n << BigInt(index)));
+    calc.operandReady = true;
+  }
+
+  /* Memory is shared with the other modes, so it may hold a plain number. */
+  function progMemoryValue(calc) {
+    if (typeof calc.memory === "bigint") return calc.memory;
+    var number = Number(calc.memory) || 0;
+    var magnitude = progParse(10, String(Math.abs(Math.trunc(number))));
+    return number < 0 ? -magnitude : magnitude;
+  }
+
+  function progMemory(calc, kind) {
+    switch (kind) {
+      case "store":
+        calc.memory = calc.value;
+        calc.hasMemory = true;
+        return;
+      case "clear":
+        calc.memory = 0n;
+        calc.hasMemory = false;
+        return;
+      case "recall":
+        if (!calc.hasMemory) return;
+        calc.entry = null;
+        calc.operandText = null;
+        calc.value = progTrunc(calc, progMemoryValue(calc));
+        calc.operandReady = true;
+        return;
+      case "add":
+        calc.memory = progTrunc(calc, progMemoryValue(calc) + calc.value);
+        calc.hasMemory = true;
+        return;
+      case "subtract":
+        calc.memory = progTrunc(calc, progMemoryValue(calc) - calc.value);
+        calc.hasMemory = true;
+        return;
+      default:
+        return;
+    }
+  }
+
+  function progPress(calc, kind, arg) {
+    switch (kind) {
+      case "digit": progInputDigit(calc, arg); return;
+      case "op": progSetOperator(calc, arg); return;
+      case "equals": progEquals(calc); return;
+      case "clear": calc.reset(); return;
+      case "clearEntry": progClearEntry(calc); return;
+      case "backspace": progBackspace(calc); return;
+      case "unary":
+        if (arg === "negate") progNegate(calc);
+        else if (arg === "not") progNot(calc);
+        else if (ROTATES[arg]) progRotate(calc, arg);
+        return;
+      case "base": progSetBase(calc, arg); return;
+      case "word": if (arg === "cycle") progCycleWordSize(calc); return;
+      case "shift": progSetShiftMode(calc, arg); return;
+      case "bit": progToggleBit(calc, Number(arg)); return;
+      case "memory": progMemory(calc, arg); return;
+      default: return; // point, percent, paren and the rest do not apply here
+    }
+  }
+
+  /* The four live base readouts; every base shows the value at once. */
+  Calculator.prototype.baseValue = function (base) {
+    if (this.error) return this.error;
+    return progDisplay(this, base, this.value);
+  };
+
+  Calculator.prototype.wordWidth = function () { return progWidth(this); };
+  Calculator.prototype.wordLabel = function () { return this.wordSize.toUpperCase(); };
+
+  Calculator.prototype.bitValue = function (index) {
+    if (!(index >= 0 && index < progWidth(this))) return 0;
+    return Number((this.value >> BigInt(index)) & 1n);
+  };
+
+  /* Whether the active base accepts this digit; the shell dims the rest. */
+  Calculator.prototype.acceptsDigit = function (digit) {
+    if (this.mode !== "programmer") return true;
+    return progDigitValue(this, digit) !== -1;
+  };
+
   NS.engine = {
+
     Calculator: Calculator,
     OPERATORS: OPERATORS,
     ERRORS: ERRORS

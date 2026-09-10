@@ -166,6 +166,10 @@ html[data-theme="light"] body { background: #e5e5e5; }
   white-space: nowrap;
 }
 
+/* Programmer shows the four live base readouts in place of the single value. */
+.calc[data-mode="programmer"] .value { display: none; }
+.calc[data-mode="programmer"] { --width: 480px; --key-height: 40px; }
+
 .memory-row {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -234,6 +238,70 @@ html[data-theme="light"] body { background: #e5e5e5; }
   background: var(--key-selected);
   color: var(--key-selected-text);
 }
+
+/* Programmer mode replaces the single value with the four live base readouts,
+ * the word-size selector and the bit-toggle panel (AC-004). */
+.programmer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 6px 6px;
+}
+
+/* The word-size button cycles; the shift-mode selector is a row of four. */
+.programmer-words { display: grid; grid-template-columns: 1fr; gap: 2px; }
+.programmer-shifts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
+
+.programmer-readout { display: flex; flex-direction: column; gap: 2px; }
+
+.programmer-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-key);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: default;
+}
+
+.programmer-row:hover { background: var(--key-hover); }
+.programmer-row[aria-current="true"] { background: var(--key-selected); color: var(--key-selected-text); }
+.programmer-label { flex: 0 0 34px; font-size: 11px; font-weight: 600; text-align: left; }
+.programmer-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  text-align: right;
+  overflow: hidden;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.programmer-bits {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 2px;
+}
+
+.bit-key {
+  height: 22px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--key-function);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.bit-key:hover:not(:disabled) { background: var(--key-function-hover); }
+.bit-key[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.bit-key:disabled { color: var(--key-disabled); }
 
 .placeholder {
   min-height: calc(var(--key-height) * 6 + 10px);

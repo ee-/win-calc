@@ -60,6 +60,7 @@ const NAMESPACE = {
   "engine.js": "engine",
   "modes/standard.js": "modes.standard",
   "modes/scientific.js": "modes.scientific",
+  "modes/programmer.js": "modes.programmer",
   "ui.js": "ui"
 };
 
