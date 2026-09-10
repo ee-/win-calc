@@ -8,7 +8,11 @@ assignees: []
 
 <!-- Copy this file into the project's .github/ISSUE_TEMPLATE/ when the project
      switches to forge mode. The body below is the contract; it is frozen once
-     execution begins and is never rewritten (see the amendment rules at the end). -->
+     execution begins and is never rewritten (see the amendment rules at the end).
+
+     An owner decision is recorded only with the owner's own words quoted and the
+     person who relayed them named. A statement of approval with no quoted source
+     is not an approval, no matter who wrote it. -->
 
 ## Objective
 
