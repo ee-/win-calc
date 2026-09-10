@@ -1,0 +1,10 @@
+Tests added or changed in 8d5f2d4..bc84a80 (all files new in bc84a80):
+
+ tests/engine.test.js   | 269 +++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/format.test.js   |  59 +++++++++++
+ tests/helper.js        |  45 +++++++++
+ tests/shell.test.js    | 119 ++++++++++++++++++++++
+ tests/standard.test.js | 117 +++++++++++++++++++++
+ 5 files changed, 609 insertions(+)
+
+42 tests run, 42 pass, 0 fail at bc84a80 (node --test, exit 0; see ../g2-node-test-output.txt).
