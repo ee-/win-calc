@@ -312,14 +312,18 @@
     this.history.length = 0;
   };
 
-  /* Drop a value straight into the display (history recall). The value may
-   * arrive as a number or as the exact decimal text history stored, so a
-   * QWORD survives the round trip. */
+  /* Drop a value straight into the display (history recall). History carries
+   * the exact decimal text of the value, so a QWORD survives the round trip;
+   * a value recorded by another mode may be fractional or in exponent form,
+   * and integer mode takes its truncation, as memory recall does. */
   Calculator.prototype.setValue = function (value) {
     var text = String(value);
     this.reset();
-    if (this.mode === "programmer") this.value = progTrunc(this, progParse(10, text));
-    else this.value = Number(text);
+    if (this.mode === "programmer") {
+      this.value = progTrunc(this, progParse(10, progIntegerText(text)));
+    } else {
+      this.value = Number(text);
+    }
     this.operandReady = true;
   };
 
@@ -994,6 +998,13 @@
     return BigInt(text);
   }
 
+  /* Decimal text for an integer parse: a whole number passes through (so a
+   * QWORD keeps every digit), anything else - a fraction or an exponent form
+   * recorded by another mode - is truncated toward zero. */
+  function progIntegerText(text) {
+    return /^-?\d+$/.test(text) ? text : String(Math.trunc(Number(text) || 0));
+  }
+
   /* The value of a typed entry, sign included. */
   function progEntryValue(calc, text) {
     var negative = text.charAt(0) === "-";
@@ -1220,7 +1231,9 @@
     calc.history.push({
       expression: text,
       result: progDisplay(calc, calc.base, calc.value),
-      value: progRawText(calc, calc.value)
+      // The exact signed decimal text, so recall works whatever base was
+      // active when the calculation was recorded (see setValue).
+      value: progSigned(calc, calc.value).toString(10)
     });
   }
 
