@@ -476,6 +476,111 @@ test("memory and history work in Programmer", () => {
   assert.equal(grouped.display, "1,000,000");
 });
 
+test("a history value round-trips whatever base recorded it", () => {
+  // The recorded value must not depend on the base that happened to be
+  // active: recall parses it as an integer, not as base-specific text.
+  const cases = [
+    { base: "hex", keys: "digit:f,digit:f,op:add,digit:1,equals", value: "256", display: "100" },
+    { base: "dec", keys: "5,op:add,1,equals", value: "6", display: "6" },
+    { base: "oct", keys: "7,op:add,1,equals", value: "8", display: "10" },
+    { base: "bin", keys: "1,0,1,0,op:add,1,equals", value: "11", display: "1011" }
+  ];
+  for (const item of cases) {
+    const calc = prog();
+    press(calc, "base:" + item.base);
+    press(calc, item.keys);
+    assert.equal(calc.history.length, 1, item.base + " recorded one entry");
+    assert.equal(calc.history[0].value, item.value,
+      item.base + " stores the value, not the base's own text");
+
+    // Recall with that base still active: the display comes straight back.
+    calc.setValue(calc.history[0].value);
+    assert.equal(calc.display, item.display, item.base + " recall");
+  }
+
+  // The same value recalled in a different base is the same number.
+  const cross = prog();
+  press(cross, "base:hex,digit:f,digit:f,op:add,digit:1,equals");
+  cross.setValue(cross.history[0].value);
+  cross.press("base:bin");
+  assert.equal(cross.display, "0001 0000 0000", "256 read in binary");
+  cross.press("base:dec");
+  assert.equal(cross.display, "256");
+});
+
+test("a lettered or negative result recalls instead of throwing", () => {
+  // "F" used to reach the integer parser as text and throw inside the click
+  // path, so the history row did nothing.
+  const letters = prog();
+  press(letters, "base:hex,digit:f,op:and,digit:f,equals");
+  assert.equal(letters.display, "F");
+  assert.equal(letters.history[0].value, "15");
+  letters.setValue(letters.history[0].value);
+  assert.equal(letters.display, "F");
+
+  const spelled = prog();
+  press(spelled, "base:hex,digit:a,digit:b,digit:c,op:xor,digit:f,equals");
+  assert.equal(spelled.display, "AB3");
+  spelled.setValue(spelled.history[0].value);
+  assert.equal(spelled.display, "AB3");
+
+  const negative = prog();
+  press(negative, "5,op:sub,9,equals");
+  assert.equal(negative.display, "-4");
+  assert.equal(negative.history[0].value, "-4");
+  negative.setValue(negative.history[0].value);
+  assert.equal(negative.display, "-4");
+
+  // A QWORD value keeps every digit of its decimal text.
+  const wide = prog();
+  press(wide, "1,op:lsh,6,3,equals");
+  assert.equal(wide.display, "-9,223,372,036,854,775,808");
+  assert.equal(wide.history[0].value, "-9223372036854775808");
+  wide.setValue(wide.history[0].value);
+  assert.equal(wide.display, "-9,223,372,036,854,775,808");
+  assert.equal(wide.baseValue("hex"), "8000 0000 0000 0000", "the bit pattern survives recall");
+});
+
+test("a repeated = records a history value that recalls", () => {
+  const calc = prog();
+  press(calc, "base:hex,digit:a,op:add,digit:1,equals");
+  assert.equal(calc.display, "B");
+  assert.equal(calc.history.length, 1);
+  assert.equal(calc.history[0].value, "11");
+
+  press(calc, "equals");
+  assert.equal(calc.display, "C");
+  assert.equal(calc.history.length, 2, "a repeated = records history");
+  assert.equal(calc.history[1].value, "12");
+  calc.setValue(calc.history[1].value);
+  assert.equal(calc.display, "C");
+});
+
+test("a history value recorded by another mode lands exactly", () => {
+  // History is shared with the other modes, so recall must cope with a
+  // fractional or exponent-form value as well as a whole number.
+  const standard = new Calculator();
+  press(standard, "1,op:div,2,equals");
+  assert.equal(standard.display, "0.5");
+
+  const calc = prog();
+  calc.setValue(standard.history[0].value);
+  assert.equal(calc.display, "0", "integer mode takes the truncation");
+  assert.equal(calc.value, 0n);
+
+  const scientific = new Calculator();
+  scientific.setMode("scientific");
+  press(scientific, "1,op:div,1,0,0,0,0,equals");
+  calc.setValue(scientific.history[0].value);
+  assert.equal(calc.display, "0");
+
+  // Standard and Scientific recall is untouched.
+  standard.setValue(standard.history[0].value);
+  assert.equal(standard.display, "0.5");
+  scientific.setValue(scientific.history[0].value);
+  assert.equal(scientific.display, "0.0001");
+});
+
 test("switching modes leaves Standard and Scientific untouched", () => {
   const calc = new Calculator();
   assert.equal(press(calc, "1,op:add,2,op:mul,3,equals"), "9", "Standard stays left to right");
