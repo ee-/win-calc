@@ -25,6 +25,8 @@
   --accent-hover: #52bff2;
   --accent-active: #47afe0;
   --on-accent: #000000;
+  --key-selected: rgba(96, 205, 255, 0.28);
+  --key-selected-text: #ffffff;
   --drawer: #2b2b2b;
   --drawer-hover: rgba(255, 255, 255, 0.08);
   --history-item: rgba(255, 255, 255, 0.04);
@@ -54,6 +56,8 @@ html[data-theme="light"] {
   --accent-hover: #1975c5;
   --accent-active: #3183ca;
   --on-accent: #ffffff;
+  --key-selected: rgba(0, 103, 192, 0.22);
+  --key-selected-text: #000000;
   --drawer: #f9f9f9;
   --drawer-hover: rgba(0, 0, 0, 0.06);
   --history-item: rgba(0, 0, 0, 0.04);
@@ -89,6 +93,13 @@ html[data-theme="light"] body { background: #e5e5e5; }
 }
 
 .calc.history-open { width: calc(var(--width) + var(--history-width)); }
+
+/* Scientific packs six columns and eight rows, as the real app does, so its
+ * window is wider and its keys shorter than Standard's. */
+.calc[data-mode="scientific"] {
+  --width: 460px;
+  --key-height: 38px;
+}
 
 .titlebar {
   display: flex;
@@ -217,6 +228,12 @@ html[data-theme="light"] body { background: #e5e5e5; }
 .key[data-role="operator"]:hover { background: var(--key-operator-hover); }
 .key[data-role="equals"]:hover { background: var(--accent-hover); }
 .key[data-role="equals"]:active { background: var(--accent-active); }
+
+/* The Scientific 2nd toggle and the active angle unit read as selected. */
+.key[aria-pressed="true"] {
+  background: var(--key-selected);
+  color: var(--key-selected-text);
+}
 
 .placeholder {
   min-height: calc(var(--key-height) * 6 + 10px);

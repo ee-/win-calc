@@ -6,7 +6,7 @@ const path = require("path");
 const fs = require("fs");
 
 const ROOT = path.join(__dirname, "..");
-const FILES = ["format.js", "engine.js", "modes/standard.js", "ui.js"];
+const FILES = ["format.js", "engine.js", "modes/standard.js", "modes/scientific.js", "ui.js"];
 
 function loadApp() {
   for (const file of FILES) require(path.join(ROOT, file));

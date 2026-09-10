@@ -50,8 +50,11 @@
     }
   }
 
-  /* Keys auto-place into the 4-column grid; the order in the mode's keypad
-   * definition is the layout. */
+  /* Keys auto-place into the mode's grid; the order in the mode's keypad
+   * definition is the layout. `keypadEntries` pairs each button with its key
+   * data so the 2nd layer can swap labels and actions. */
+  var keypadEntries = [];
+
   function buildKey(key) {
     var button = document.createElement("button");
     button.type = "button";
@@ -66,9 +69,37 @@
   function renderKeypad(container, mode) {
     container.textContent = "";
     container.hidden = false;
+    container.style.gridTemplateColumns = "repeat(" + (mode.columns || 4) + ", 1fr)";
+    keypadEntries = [];
     for (var i = 0; i < mode.keypad.length; i++) {
       var row = mode.keypad[i];
-      for (var j = 0; j < row.length; j++) container.appendChild(buildKey(row[j]));
+      for (var j = 0; j < row.length; j++) {
+        var button = buildKey(row[j]);
+        container.appendChild(button);
+        keypadEntries.push({ button: button, key: row[j] });
+      }
+    }
+  }
+
+  /* Scientific's 2nd key toggles the functions that carry an alt layer
+   * (sin -> sin-1 and the rest); the active angle unit reads as pressed, as
+   * the real app shows it. */
+  function applyKeypadState(calculator) {
+    var second = calculator.mode === "scientific" && calculator.second;
+    for (var i = 0; i < keypadEntries.length; i++) {
+      var entry = keypadEntries[i];
+      var key = entry.key;
+      var layer = second && key.alt ? key.alt : key;
+      entry.button.textContent = layer.label;
+      entry.button.dataset.action = layer.action;
+      entry.button.dataset.role = layer.role || key.role;
+      entry.button.setAttribute("aria-label", layer.ariaLabel || layer.label);
+      if (key.action === "second") {
+        entry.button.setAttribute("aria-pressed", second ? "true" : "false");
+      } else if (key.action.indexOf("angle:") === 0) {
+        entry.button.setAttribute("aria-pressed",
+          calculator.angleUnit === key.action.slice(6).toUpperCase() ? "true" : "false");
+      }
     }
   }
 
@@ -176,6 +207,7 @@
       valueEl.textContent = calculator.display;
       expressionEl.textContent = calculator.expression;
       fitDisplay(valueEl);
+      applyKeypadState(calculator);
       var signature = calculator.history.length + ":" + calculator.memory + ":" + calculator.hasMemory;
       if (signature !== historySignature) {
         historySignature = signature;
@@ -193,6 +225,8 @@
       var definition = NS.modes[id];
       currentMode = id;
       mode = definition;
+      calculator.setMode(id);
+      calculatorEl.dataset.mode = id;
       modeTitleEl.textContent = modeTitle(id);
       drawerEl.hidden = true;
       navButton.setAttribute("aria-expanded", "false");
@@ -200,6 +234,7 @@
         placeholderEl.hidden = true;
         renderKeypad(keypadEl, definition);
       } else {
+        keypadEntries = [];
         keypadEl.hidden = true;
         keypadEl.textContent = "";
         placeholderEl.hidden = false;
