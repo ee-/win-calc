@@ -129,6 +129,16 @@ test("percent is relative to the pending + or - operand", () => {
   assert.equal(press(bare, "50,unary:percent"), "0.5");
 });
 
+test("percent under multiply and divide converts the entry to a fraction", () => {
+  const mul = calculator();
+  assert.equal(press(mul, "200,op:mul,1,0,unary:percent"), "0.1");
+  assert.equal(press(mul, "equals"), "20");
+
+  const div = calculator();
+  assert.equal(press(div, "200,op:div,1,0,unary:percent"), "0.1");
+  assert.equal(press(div, "equals"), "2,000");
+});
+
 test("1/x, x^2 and sqrt", () => {
   const reciprocal = calculator();
   assert.equal(press(reciprocal, "4,unary:reciprocal"), "0.25");
