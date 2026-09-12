@@ -39,6 +39,68 @@
         <div class="programmer-bits" id="programmer-bits" aria-label="Bit toggles"></div>
       </div>
 
+      <div class="date" id="date-panel" hidden>
+        <div class="date-top">
+          <select class="date-select" id="date-option" aria-label="Date calculation"></select>
+        </div>
+
+        <div class="date-settings" id="date-settings">
+          <div class="date-field" id="date-field-from">
+            <label class="date-field-label" id="date-from-label" for="date-from">From</label>
+            <div class="date-input-row">
+              <input class="date-input" id="date-from" type="text" autocomplete="off" spellcheck="false" aria-labelledby="date-from-label">
+              <button class="date-picker-button" id="date-from-button" type="button" aria-label="Choose a date" aria-expanded="false">
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <rect x="2" y="3.5" width="12" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M2 6.5h12M5.5 2v3M10.5 2v3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="date-field" id="date-field-to">
+            <label class="date-field-label" id="date-to-label" for="date-to">To</label>
+            <div class="date-input-row">
+              <input class="date-input" id="date-to" type="text" autocomplete="off" spellcheck="false" aria-labelledby="date-to-label">
+              <button class="date-picker-button" id="date-to-button" type="button" aria-label="Choose a date" aria-expanded="false">
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <rect x="2" y="3.5" width="12" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M2 6.5h12M5.5 2v3M10.5 2v3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="date-directions" id="date-directions" role="radiogroup" aria-label="Add or subtract"></div>
+
+          <div class="date-units" id="date-units"></div>
+        </div>
+
+        <div class="date-result">
+          <div class="date-result-label" id="date-result-label"></div>
+          <output class="date-result-value" id="date-result-value" aria-live="polite"></output>
+          <div class="date-result-days" id="date-result-days"></div>
+        </div>
+
+        <div class="date-calendar" id="date-calendar" hidden>
+          <div class="date-calendar-header">
+            <button class="date-calendar-nav" id="date-calendar-prev" type="button" aria-label="Previous month">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <span class="date-calendar-title" id="date-calendar-title"></span>
+            <button class="date-calendar-nav" id="date-calendar-next" type="button" aria-label="Next month">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="date-calendar-weekdays" id="date-calendar-weekdays"></div>
+          <div class="date-calendar-grid" id="date-calendar-grid"></div>
+        </div>
+      </div>
+
       <div class="memory-row" id="memory-row"></div>
 
       <div class="keypad" id="keypad"></div>
@@ -68,6 +130,7 @@
 <script src="modes/standard.js"></script>
 <script src="modes/scientific.js"></script>
 <script src="modes/programmer.js"></script>
+<script src="modes/date.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>

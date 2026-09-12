@@ -1502,11 +1502,409 @@
     return progDigitValue(this, digit) !== -1;
   };
 
-  NS.engine = {
+  /* --- Date Calculation mode ----------------------------------------------
+   * Calendar arithmetic for the date view (AC-005), following the real app's
+   * DateCalculationEngine (src/Calculator.ViewModels/Common/DateCalculator.cs;
+   * see docs/wo4-scout-date-semantics.md for the citations):
+   *   - the difference is greedy, largest unit first, over
+   *     years - months - weeks - days, calendar-correct, earlier date first
+   *   - adding applies years, then months, then days; subtracting applies days,
+   *     then months, then years (the reference's order differs by direction)
+   *   - calendar month arithmetic clamps to the target month's last day
+   *   - a result outside the supported range is refused, which the view reports
+   *     as "Date out of Bound"
+   *
+   * Dates are plain { year, month, day } records (month 1-12) over the
+   * proleptic Gregorian calendar. The day number is computed arithmetically,
+   * so no clock, locale or time zone can move a result.
+   */
 
+  var DATE_MIN_YEAR = 1601;
+  var DATE_MAX_YEAR = 2550;
+  var DATE_MAX_OFFSET = 999;
+  var DATE_UNITS = ["years", "months", "days"];
+  var DATE_SAME_TEXT = "Same dates";
+  var DATE_FAILED_TEXT = "Calculation failed";
+  var DATE_OUT_OF_BOUND_TEXT = "Date out of Bound";
+  var DATE_MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  var DATE_WEEKDAY_NAMES = [
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+  ];
+
+  function dateIsLeapYear(year) {
+    return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  }
+
+  function dateDaysInMonth(year, month) {
+    if (month === 2) return dateIsLeapYear(year) ? 29 : 28;
+    return [31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  }
+
+  function dateMake(year, month, day) {
+    return { year: year, month: month, day: day };
+  }
+
+  /* Days since 1970-01-01 (Howard Hinnant's civil-from-days algorithm). */
+  function dateDayNumber(date) {
+    var year = date.year;
+    var month = date.month;
+    year -= month <= 2 ? 1 : 0;
+    var era = Math.floor(year / 400);
+    var yearOfEra = year - era * 400;
+    var dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + date.day - 1;
+    var dayOfEra = yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+    return era * 146097 + dayOfEra - 719468;
+  }
+
+  /* The inverse: the calendar date a day number names. */
+  function dateFromDayNumber(number) {
+    var shifted = number + 719468;
+    var era = Math.floor(shifted / 146097);
+    var dayOfEra = shifted - era * 146097;
+    var yearOfEra = Math.floor((dayOfEra - Math.floor(dayOfEra / 1460) +
+      Math.floor(dayOfEra / 36524) - Math.floor(dayOfEra / 146096)) / 365);
+    var year = yearOfEra + era * 400;
+    var dayOfYear = dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
+    var monthPart = Math.floor((5 * dayOfYear + 2) / 153);
+    var day = dayOfYear - Math.floor((153 * monthPart + 2) / 5) + 1;
+    var month = monthPart + (monthPart < 10 ? 3 : -9);
+    return dateMake(year + (month <= 2 ? 1 : 0), month, day);
+  }
+
+  function dateCompare(a, b) {
+    if (a.year !== b.year) return a.year - b.year;
+    if (a.month !== b.month) return a.month - b.month;
+    return a.day - b.day;
+  }
+
+  function dateIsSame(a, b) {
+    return dateCompare(a, b) === 0;
+  }
+
+  function dateAddDays(date, days) {
+    return dateFromDayNumber(dateDayNumber(date) + days);
+  }
+
+  /* Calendar month arithmetic: the day clamps to the target month's last day
+   * (2008-01-31 + 1 month = 2008-02-29, as the reference's own vectors show). */
+  function dateAddMonths(date, months) {
+    var total = (date.year * 12) + (date.month - 1) + months;
+    var year = Math.floor(total / 12);
+    var month = total - year * 12 + 1;
+    var day = Math.min(date.day, dateDaysInMonth(year, month));
+    return dateMake(year, month, day);
+  }
+
+  function dateAddYears(date, years) {
+    return dateAddMonths(date, years * 12);
+  }
+
+  /* Read as a calendar day: whole numbers only, and inside the mode's range. */
+  function dateIsValid(date) {
+    if (!date || !isFinite(date.year) || !isFinite(date.month) || !isFinite(date.day)) return false;
+    if (date.year % 1 !== 0 || date.month % 1 !== 0 || date.day % 1 !== 0) return false;
+    if (date.month < 1 || date.month > 12) return false;
+    return date.day >= 1 && date.day <= dateDaysInMonth(date.year, date.month);
+  }
+
+  /* The mode's supported range: the reference's date fields are bounded
+   * 1601-01-01 .. 2550-12-31, and an add/subtract result outside it is
+   * refused. The difference engine itself is not bounded by it - the
+   * reference's own tests drive it over dates the picker cannot reach. */
+  function dateInRange(date) {
+    return dateIsValid(date) && date.year >= DATE_MIN_YEAR && date.year <= DATE_MAX_YEAR;
+  }
+
+  function dateToday() {
+    var now = new Date();
+    return dateMake(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  }
+
+  function dateNormalize(value) {
+    if (value instanceof Date) return dateMake(value.getFullYear(), value.getMonth() + 1, value.getDate());
+    if (typeof value === "string") return dateParse(value);
+    return dateIsValid(value) ? value : null;
+  }
+
+  /* The field text: the reference's pickers carry DateFormat "day month year",
+   * which for en-US is the short date (9/2/2013 - no leading zeros), and the
+   * placeholder is today rendered the same way. */
+  function dateFormat(date) {
+    return date.month + "/" + date.day + "/" + date.year;
+  }
+
+  /* The calendar's heading: the month and year it is showing. */
+  function dateFormatMonthYear(date) {
+    return DATE_MONTH_NAMES[date.month - 1] + " " + date.year;
+  }
+
+  function dateFormatLong(date) {
+    return DATE_WEEKDAY_NAMES[dateWeekday(date)] + ", " +
+      DATE_MONTH_NAMES[date.month - 1] + " " + date.day + ", " + date.year;
+  }
+
+  function dateWeekday(date) {
+    return ((dateDayNumber(date) + 4) % 7 + 7) % 7; // 0 = Sunday
+  }
+
+  /* The en-US shapes the mode accepts, whichever one the field was typed in:
+   * the field's own m/d/yyyy, the long form, and ISO. */
+  function dateParse(text) {
+    if (typeof text !== "string") return null;
+    var trimmed = text.trim();
+    if (trimmed === "") return null;
+    var match;
+
+    match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+    if (match) return dateChecked(Number(match[3]), Number(match[1]), Number(match[2]));
+
+    match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
+    if (match) return dateChecked(Number(match[1]), Number(match[2]), Number(match[3]));
+
+    match = /^([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(trimmed);
+    if (match) return dateFromMonthName(match[1], Number(match[2]), Number(match[3]));
+
+    match = /^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})$/.exec(trimmed);
+    if (match) return dateFromMonthName(match[2], Number(match[1]), Number(match[3]));
+
+    return null;
+  }
+
+  /* A full month name or an unambiguous abbreviation of it ("February",
+   * "Febru", "Feb"). */
+  function dateFromMonthName(name, day, year) {
+    var lower = name.toLowerCase();
+    for (var i = 0; i < DATE_MONTH_NAMES.length; i++) {
+      var month = DATE_MONTH_NAMES[i].toLowerCase();
+      if (month === lower) return dateChecked(year, i + 1, day);
+      if (lower.length >= 3 && month.indexOf(lower) === 0) return dateChecked(year, i + 1, day);
+    }
+    return null;
+  }
+
+  function dateChecked(year, month, day) {
+    var date = dateMake(year, month, day);
+    return dateIsValid(date) ? date : null;
+  }
+
+  /* --- the difference: greedy, largest unit first --- */
+
+  /* The units the reference's DateUnit flags name; the view asks for all four
+   * for the breakdown line and for days alone on the secondary line. */
+  var DATE_ALL_UNITS = ["years", "months", "weeks", "days"];
+  var DATE_DAY_UNIT = ["days"];
+
+  /* The breakdown TryGetDateDifference produces, greedy and largest unit
+   * first. `units` is the requested mask: a unit outside it stays 0 and what
+   * it would have taken flows into the days slot, which is how the reference
+   * behaves (a {Year, Month} request leaves the remainder in Day). The earlier
+   * date is the pivot either way round, so the result is a magnitude. */
+  function dateDifference(first, second, units) {
+    if (!dateIsValid(first) || !dateIsValid(second)) return null;
+    var mask = units || DATE_ALL_UNITS;
+    var from = first;
+    var to = second;
+    if (dateCompare(from, to) > 0) {
+      from = second;
+      to = first;
+    }
+    var result = { years: 0, months: 0, weeks: 0, days: 0 };
+    var pivot = from;
+
+    if (mask.indexOf("years") !== -1) {
+      while (dateCompare(dateAddYears(pivot, result.years + 1), to) <= 0) result.years++;
+      pivot = dateAddYears(pivot, result.years);
+    }
+    if (mask.indexOf("months") !== -1) {
+      while (dateCompare(dateAddMonths(pivot, result.months + 1), to) <= 0) result.months++;
+      pivot = dateAddMonths(pivot, result.months);
+    }
+    var remaining = dateDayNumber(to) - dateDayNumber(pivot);
+    if (mask.indexOf("weeks") !== -1) {
+      result.weeks = Math.floor(remaining / 7);
+      remaining -= result.weeks * 7;
+    }
+    result.days = remaining;
+    return result;
+  }
+
+  /* The same span counted in whole days (the reference's days output format,
+   * which cannot fail because it decomposes nothing). */
+  function dateDifferenceInDays(first, second) {
+    if (!dateIsValid(first) || !dateIsValid(second)) return null;
+    return Math.abs(dateDayNumber(second) - dateDayNumber(first));
+  }
+
+  function dateUnitText(count, singular) {
+    return count + " " + singular + (count === 1 ? "" : "s");
+  }
+
+  /* "1 year, 2 months, 3 weeks, 4 days"; zero units are omitted. */
+  function dateDifferenceText(parts) {
+    var pieces = [];
+    if (parts.years) pieces.push(dateUnitText(parts.years, "year"));
+    if (parts.months) pieces.push(dateUnitText(parts.months, "month"));
+    if (parts.weeks) pieces.push(dateUnitText(parts.weeks, "week"));
+    if (parts.days) pieces.push(dateUnitText(parts.days, "day"));
+    return pieces.join(", ");
+  }
+
+  function dateDifferenceDaysText(days) {
+    return dateUnitText(days, "day");
+  }
+
+  /* --- the two calculators, and their live results --- */
+
+  function DateCalculator(today) {
+    this.today = dateNormalize(today) || dateToday();
+    this.option = "difference";
+    this.direction = "add";
+    this.from = this.today;
+    this.to = this.today;
+    this.offsets = { years: 0, months: 0, days: 0 };
+  }
+
+  /* The option switch keeps the From date, as the reference view does. */
+  DateCalculator.prototype.setOption = function (option) {
+    if (option !== "difference" && option !== "addSubtract") return false;
+    this.option = option;
+    return true;
+  };
+
+  DateCalculator.prototype.setDirection = function (direction) {
+    if (direction !== "add" && direction !== "subtract") return false;
+    this.direction = direction;
+    return true;
+  };
+
+  /* Typed entry: an unparsable value leaves the date as it was, which is the
+   * reference picker's reselect behaviour. */
+  DateCalculator.prototype.setDateText = function (field, text) {
+    if (field !== "from" && field !== "to") return false;
+    var date = dateParse(text);
+    if (!date || !dateInRange(date)) return false;
+    this[field] = date;
+    return true;
+  };
+
+  DateCalculator.prototype.setDate = function (field, date) {
+    if (field !== "from" && field !== "to") return false;
+    var normalized = dateNormalize(date);
+    if (!normalized || !dateInRange(normalized)) return false;
+    this[field] = normalized;
+    return true;
+  };
+
+  /* The reference's selectors carry 0-999. */
+  DateCalculator.prototype.setOffset = function (unit, value) {
+    if (DATE_UNITS.indexOf(unit) === -1) return false;
+    var number = Math.trunc(Number(value));
+    if (!isFinite(number) || number < 0 || number > DATE_MAX_OFFSET) return false;
+    this.offsets[unit] = number;
+    return true;
+  };
+
+  DateCalculator.prototype.offset = function (unit) {
+    return this.offsets[unit];
+  };
+
+  /* Adding applies years, months, days; subtracting reverses that order. */
+  DateCalculator.prototype.computeDate = function () {
+    var offsets = this.offsets;
+    var date = this.from;
+    var valid;
+    if (this.direction === "add") {
+      date = dateAddYears(date, offsets.years);
+      date = dateAddMonths(date, offsets.months);
+      date = dateAddDays(date, offsets.days);
+    } else {
+      date = dateAddDays(date, -offsets.days);
+      date = dateAddMonths(date, -offsets.months);
+      date = dateAddYears(date, -offsets.years);
+    }
+    if (dateIsValid(date)) date = dateMake(date.year, date.month, date.day);
+    valid = dateInRange(date);
+    return valid ? date : null;
+  };
+
+  DateCalculator.prototype.difference = function () {
+    return dateDifference(this.from, this.to);
+  };
+
+  DateCalculator.prototype.differenceDays = function () {
+    return dateDifferenceInDays(this.from, this.to);
+  };
+
+  /* The primary result line, in the reference's branch order: the same dates
+   * first, then the day-only form, then the breakdown. */
+  Object.defineProperty(DateCalculator.prototype, "result", {
+    get: function () {
+      if (this.option === "difference") {
+        var days = this.differenceDays();
+        if (days === 0) return DATE_SAME_TEXT;
+        var parts = this.difference();
+        if (parts === null) return DATE_FAILED_TEXT;
+        if (!parts.years && !parts.months && !parts.weeks) return dateDifferenceDaysText(days);
+        return dateDifferenceText(parts);
+      }
+      var date = this.computeDate();
+      return date === null ? DATE_OUT_OF_BOUND_TEXT : dateFormatLong(date);
+    }
+  });
+
+  /* The secondary line: the whole span in days, shown only when the breakdown
+   * carries a year, month or week (the reference's IsDiffInDays condition). */
+  Object.defineProperty(DateCalculator.prototype, "resultInDays", {
+    get: function () {
+      if (this.option !== "difference") return "";
+      var parts = this.difference();
+      if (parts === null) return "";
+      if (!parts.years && !parts.months && !parts.weeks) return "";
+      return dateDifferenceDaysText(this.differenceDays());
+    }
+  });
+
+  Object.defineProperty(DateCalculator.prototype, "fromText", {
+    get: function () { return dateFormat(this.from); }
+  });
+
+  Object.defineProperty(DateCalculator.prototype, "toText", {
+    get: function () { return dateFormat(this.to); }
+  });
+
+  NS.engine = {
     Calculator: Calculator,
+    DateCalculator: DateCalculator,
     OPERATORS: OPERATORS,
-    ERRORS: ERRORS
+    ERRORS: ERRORS,
+    DATE_UNITS: DATE_UNITS,
+    DATE_ALL_UNITS: DATE_ALL_UNITS,
+    DATE_DAY_UNIT: DATE_DAY_UNIT,
+    DATE_SAME_TEXT: DATE_SAME_TEXT,
+    DATE_FAILED_TEXT: DATE_FAILED_TEXT,
+    DATE_OUT_OF_BOUND_TEXT: DATE_OUT_OF_BOUND_TEXT,
+    DATE_MAX_OFFSET: DATE_MAX_OFFSET,
+    DATE_MIN_YEAR: DATE_MIN_YEAR,
+    DATE_MAX_YEAR: DATE_MAX_YEAR,
+    dateParse: dateParse,
+    dateFormat: dateFormat,
+    dateFormatLong: dateFormatLong,
+    dateFormatMonthYear: dateFormatMonthYear,
+    dateDifference: dateDifference,
+    dateDifferenceInDays: dateDifferenceInDays,
+    dateDifferenceText: dateDifferenceText,
+    dateDifferenceDaysText: dateDifferenceDaysText,
+    dateAddDays: dateAddDays,
+    dateAddMonths: dateAddMonths,
+    dateAddYears: dateAddYears,
+    dateMake: dateMake,
+    dateWeekday: dateWeekday,
+    dateDaysInMonth: dateDaysInMonth,
+    dateIsValid: dateIsValid,
+    dateInRange: dateInRange
   };
 
   if (typeof module !== "undefined") module.exports = NS.engine;

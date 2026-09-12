@@ -135,6 +135,160 @@
     }
   }
 
+  /* Date Calculation: the mode is a form, and the engine owns its calendar
+   * arithmetic and live results. The shell renders the controls from the
+   * mode's data and writes every change straight back to the engine, so a
+   * result updates on each input (there is no Calculate button). */
+  var DATE_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+  var datePanel = null;        // the element set start() wired up
+  var dateCalendarMonth = null; // { year, month } the open calendar shows
+  var dateCalendarField = null; // "from" | "to" the open calendar belongs to
+
+  function renderDateOptions(select, mode) {
+    select.textContent = "";
+    for (var i = 0; i < mode.options.length; i++) {
+      var option = document.createElement("option");
+      option.value = mode.options[i].id;
+      option.textContent = mode.options[i].label;
+      select.appendChild(option);
+    }
+  }
+
+  function renderDateDirections(container, mode) {
+    container.textContent = "";
+    for (var i = 0; i < mode.directions.length; i++) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "date-direction";
+      button.textContent = mode.directions[i].label;
+      button.dataset.action = "direction:" + mode.directions[i].id;
+      container.appendChild(button);
+    }
+  }
+
+  function renderDateUnits(container, mode) {
+    container.textContent = "";
+    for (var i = 0; i < mode.units.length; i++) {
+      var unit = mode.units[i];
+      var label = document.createElement("label");
+      label.className = "date-unit";
+      label.setAttribute("for", "date-unit-" + unit.id);
+      var caption = document.createElement("span");
+      caption.className = "date-unit-label";
+      caption.textContent = unit.label;
+      var input = document.createElement("input");
+      input.type = "number";
+      input.className = "date-unit-input";
+      input.id = "date-unit-" + unit.id;
+      input.min = "0";
+      input.max = String(NS.engine.DATE_MAX_OFFSET);
+      input.value = "0";
+      input.dataset.unit = unit.id;
+      label.appendChild(caption);
+      label.appendChild(input);
+      container.appendChild(label);
+    }
+  }
+
+  /* The calendar: a month grid that appears from the field, navigates by
+   * month, picks a date and clamps at the mode's bounds. */
+  function renderDateCalendar(calculator) {
+    var month = dateCalendarMonth;
+    datePanel.calendarTitle.textContent =
+      NS.engine.dateFormatMonthYear(NS.engine.dateMake(month.year, month.month, 1));
+    datePanel.calendarPrev.disabled = month.year === NS.engine.DATE_MIN_YEAR && month.month === 1;
+    datePanel.calendarNext.disabled = month.year === NS.engine.DATE_MAX_YEAR && month.month === 12;
+
+    datePanel.calendarGrid.textContent = "";
+    var first = NS.engine.dateMake(month.year, month.month, 1);
+    var lead = NS.engine.dateWeekday(first);
+    for (var blank = 0; blank < lead; blank++) {
+      var spacer = document.createElement("span");
+      spacer.className = "date-calendar-day is-blank";
+      datePanel.calendarGrid.appendChild(spacer);
+    }
+    var days = NS.engine.dateDaysInMonth(month.year, month.month);
+    var selected = dateCalendarField === "to" ? calculator.to : calculator.from;
+    for (var day = 1; day <= days; day++) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "date-calendar-day";
+      button.textContent = String(day);
+      button.dataset.action = "pick:" + month.year + "-" + month.month + "-" + day;
+      if (selected.year === month.year && selected.month === month.month && selected.day === day) {
+        button.setAttribute("aria-selected", "true");
+      }
+      datePanel.calendarGrid.appendChild(button);
+    }
+  }
+
+  function openDateCalendar(calculator, field) {
+    var date = field === "to" ? calculator.to : calculator.from;
+    dateCalendarField = field;
+    dateCalendarMonth = { year: date.year, month: date.month };
+    datePanel.calendar.hidden = false;
+    datePanel.fromButton.setAttribute("aria-expanded", field === "from" ? "true" : "false");
+    datePanel.toButton.setAttribute("aria-expanded", field === "to" ? "true" : "false");
+    renderDateCalendar(calculator);
+  }
+
+  function closeDateCalendar() {
+    if (!datePanel) return;
+    dateCalendarField = null;
+    dateCalendarMonth = null;
+    datePanel.calendar.hidden = true;
+    datePanel.fromButton.setAttribute("aria-expanded", "false");
+    datePanel.toButton.setAttribute("aria-expanded", "false");
+  }
+
+  function shiftDateCalendar(calculator, months) {
+    var month = dateCalendarMonth.month - 1 + months;
+    var year = dateCalendarMonth.year + Math.floor(month / 12);
+    var normalized = month - Math.floor(month / 12) * 12;
+    if (year < NS.engine.DATE_MIN_YEAR || year > NS.engine.DATE_MAX_YEAR) return;
+    dateCalendarMonth = { year: year, month: normalized + 1 };
+    renderDateCalendar(calculator);
+  }
+
+  function refreshDate(calculator, mode) {
+    datePanel.option.value = calculator.option;
+    var isDifference = calculator.option === "difference";
+
+    datePanel.fieldTo.hidden = !isDifference;
+    datePanel.directions.hidden = isDifference;
+    datePanel.units.hidden = isDifference;
+    datePanel.resultLabel.textContent = isDifference
+      ? mode.strings.difference
+      : mode.strings.date;
+
+    // Typed text belongs to the field the user is in; every other path (the
+    // picker, the option switch) writes the engine's own rendering.
+    if (document.activeElement !== datePanel.from) datePanel.from.value = calculator.fromText;
+    if (document.activeElement !== datePanel.to) datePanel.to.value = calculator.toText;
+    if (isDifference) {
+      datePanel.fromButton.hidden = false;
+      datePanel.toButton.hidden = false;
+    } else {
+      datePanel.fromButton.hidden = false;
+      datePanel.toButton.hidden = true;
+    }
+
+    var directionButtons = datePanel.directions.querySelectorAll(".date-direction");
+    for (var i = 0; i < directionButtons.length; i++) {
+      var id = directionButtons[i].dataset.action.slice("direction:".length);
+      directionButtons[i].setAttribute("aria-pressed", calculator.direction === id ? "true" : "false");
+    }
+
+    var unitInputs = datePanel.units.querySelectorAll(".date-unit-input");
+    for (var j = 0; j < unitInputs.length; j++) {
+      var unit = unitInputs[j].dataset.unit;
+      if (document.activeElement !== unitInputs[j]) unitInputs[j].value = String(calculator.offset(unit));
+    }
+
+    datePanel.resultValue.textContent = calculator.result;
+    datePanel.resultDays.textContent = calculator.resultInDays;
+  }
+
   /* Programmer mode's own display: the word-size and shift-mode selectors,
    * the four live base readouts (each row selects its base) and the bit-toggle
    * panel for the selected width. The values come from the engine, which owns
@@ -316,6 +470,41 @@
     var programmerBitsEl = element("programmer-bits");
     var programmerBitWidth = 0;
 
+    /* Date Calculation's own state: the engine's date calculator, created once
+     * so the From date survives switching between the two calculators. */
+    var dateCalculator = new NS.engine.DateCalculator();
+    datePanel = {
+      panel: element("date-panel"),
+      option: element("date-option"),
+      settings: element("date-settings"),
+      fieldTo: element("date-field-to"),
+      fieldFrom: element("date-field-from"),
+      from: element("date-from"),
+      to: element("date-to"),
+      fromButton: element("date-from-button"),
+      toButton: element("date-to-button"),
+      directions: element("date-directions"),
+      units: element("date-units"),
+      resultLabel: element("date-result-label"),
+      resultValue: element("date-result-value"),
+      resultDays: element("date-result-days"),
+      calendar: element("date-calendar"),
+      calendarTitle: element("date-calendar-title"),
+      calendarPrev: element("date-calendar-prev"),
+      calendarNext: element("date-calendar-next"),
+      calendarGrid: element("date-calendar-grid"),
+      calendarWeekdays: element("date-calendar-weekdays")
+    };
+    renderDateOptions(datePanel.option, NS.modes.date);
+    renderDateDirections(datePanel.directions, NS.modes.date);
+    renderDateUnits(datePanel.units, NS.modes.date);
+    for (var weekday = 0; weekday < DATE_WEEKDAYS.length; weekday++) {
+      var caption = document.createElement("span");
+      caption.className = "date-calendar-weekday";
+      caption.textContent = DATE_WEEKDAYS[weekday];
+      datePanel.calendarWeekdays.appendChild(caption);
+    }
+
     /* The panel is part of the Programmer mode only; the shell renders it from
      * the mode's data and keeps the engine as the single source of values. */
     function refreshProgrammer() {
@@ -354,6 +543,7 @@
       fitDisplay(valueEl);
       applyKeypadState(calculator);
       refreshProgrammer();
+      refreshDate(dateCalculator, NS.modes.date);
       var signature = calculator.history.length + ":" + calculator.memory + ":" + calculator.hasMemory;
       if (signature !== historySignature) {
         historySignature = signature;
@@ -376,7 +566,24 @@
       modeTitleEl.textContent = modeTitle(id);
       drawerEl.hidden = true;
       navButton.setAttribute("aria-expanded", "false");
-      if (definition && definition.keypad) {
+      // Date Calculation is a form, not a keypad: it replaces the display and
+      // the keypad, and the reference's date view carries no memory row and
+      // disables history, so both go away with it.
+      var isDate = Boolean(definition && definition.options);
+      datePanel.panel.hidden = !isDate;
+      historyButton.hidden = isDate;
+      if (isDate) {
+        historyEl.hidden = true;
+        historyButton.setAttribute("aria-pressed", "false");
+        calculatorEl.classList.remove("history-open");
+      }
+      closeDateCalendar();
+      if (isDate) {
+        keypadEntries = [];
+        keypadEl.hidden = true;
+        keypadEl.textContent = "";
+        placeholderEl.hidden = true;
+      } else if (definition && definition.keypad) {
         placeholderEl.hidden = true;
         renderKeypad(keypadEl, definition);
       } else {
@@ -393,6 +600,93 @@
       }
       refresh();
     }
+
+    /* The date form's own controls: every change goes to the engine and the
+     * result is redrawn from it, which is what makes the update live. */
+    function refreshDateOnly() {
+      refreshDate(dateCalculator, NS.modes.date);
+    }
+
+    datePanel.option.addEventListener("change", function () {
+      dateCalculator.setOption(datePanel.option.value);
+      closeDateCalendar();
+      refreshDateOnly();
+    });
+
+    datePanel.directions.addEventListener("click", function (event) {
+      var button = event.target.closest(".date-direction");
+      if (!button) return;
+      dateCalculator.setDirection(button.dataset.action.slice("direction:".length));
+      refreshDateOnly();
+    });
+
+    function bindDateField(field, input) {
+      input.addEventListener("input", function () {
+        if (dateCalculator.setDateText(field, input.value)) input.removeAttribute("aria-invalid");
+        else input.setAttribute("aria-invalid", "true");
+        refreshDateOnly();
+      });
+      // An unparsable entry reverts to the date the engine still holds, which
+      // is the reference picker's reselect behaviour.
+      input.addEventListener("blur", function () {
+        input.removeAttribute("aria-invalid");
+        input.value = field === "to" ? dateCalculator.toText : dateCalculator.fromText;
+      });
+    }
+    bindDateField("from", datePanel.from);
+    bindDateField("to", datePanel.to);
+
+    datePanel.units.addEventListener("input", function (event) {
+      var input = event.target.closest(".date-unit-input");
+      if (!input) return;
+      if (dateCalculator.setOffset(input.dataset.unit, input.value)) {
+        input.removeAttribute("aria-invalid");
+      } else {
+        input.setAttribute("aria-invalid", "true");
+      }
+      refreshDateOnly();
+    });
+    datePanel.units.addEventListener("blur", function (event) {
+      var input = event.target.closest(".date-unit-input");
+      if (!input) return;
+      input.removeAttribute("aria-invalid");
+      input.value = String(dateCalculator.offset(input.dataset.unit));
+    }, true);
+
+    datePanel.fromButton.addEventListener("click", function () {
+      if (dateCalendarField === "from") closeDateCalendar();
+      else openDateCalendar(dateCalculator, "from");
+    });
+    datePanel.toButton.addEventListener("click", function () {
+      if (dateCalendarField === "to") closeDateCalendar();
+      else openDateCalendar(dateCalculator, "to");
+    });
+
+    datePanel.calendarPrev.addEventListener("click", function () {
+      shiftDateCalendar(dateCalculator, -1);
+    });
+    datePanel.calendarNext.addEventListener("click", function () {
+      shiftDateCalendar(dateCalculator, 1);
+    });
+
+    datePanel.calendarGrid.addEventListener("click", function (event) {
+      var button = event.target.closest(".date-calendar-day");
+      if (!button || !button.dataset.action) return;
+      var parts = button.dataset.action.slice("pick:".length).split("-");
+      var picked = NS.engine.dateMake(Number(parts[0]), Number(parts[1]), Number(parts[2]));
+      dateCalculator.setDate(dateCalendarField, picked);
+      closeDateCalendar();
+      refreshDateOnly();
+    });
+
+    /* The calendar is a popup: a click outside it closes it. */
+    document.addEventListener("click", function (event) {
+      if (!dateCalendarField || datePanel.panel.hidden) return;
+      if (event.target.closest("#date-calendar") ||
+          event.target.closest("#date-from-button") ||
+          event.target.closest("#date-to-button")) return;
+      closeDateCalendar();
+    });
 
     keypadEl.addEventListener("click", function (event) {
       var key = event.target.closest(".key");
@@ -445,6 +739,7 @@
 
     document.addEventListener("keydown", function (event) {
       if (event.ctrlKey && event.key === "h") {
+        if (historyButton.hidden) return; // date view has no history
         event.preventDefault();
         historyButton.click();
         return;
