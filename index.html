@@ -45,6 +45,19 @@
         </div>
 
         <div class="date-settings" id="date-settings">
+          <div class="date-field" id="date-field-from">
+            <label class="date-field-label" id="date-from-label" for="date-from">From</label>
+            <div class="date-input-row">
+              <input class="date-input" id="date-from" type="text" autocomplete="off" spellcheck="false" aria-labelledby="date-from-label">
+              <button class="date-picker-button" id="date-from-button" type="button" aria-label="Choose a date" aria-expanded="false">
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <rect x="2" y="3.5" width="12" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M2 6.5h12M5.5 2v3M10.5 2v3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
           <div class="date-field" id="date-field-to">
             <label class="date-field-label" id="date-to-label" for="date-to">To</label>
             <div class="date-input-row">
@@ -59,19 +72,6 @@
           </div>
 
           <div class="date-directions" id="date-directions" role="radiogroup" aria-label="Add or subtract"></div>
-
-          <div class="date-field" id="date-field-from">
-            <label class="date-field-label" id="date-from-label" for="date-from">From</label>
-            <div class="date-input-row">
-              <input class="date-input" id="date-from" type="text" autocomplete="off" spellcheck="false" aria-labelledby="date-from-label">
-              <button class="date-picker-button" id="date-from-button" type="button" aria-label="Choose a date" aria-expanded="false">
-                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                  <rect x="2" y="3.5" width="12" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
-                  <path d="M2 6.5h12M5.5 2v3M10.5 2v3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                </svg>
-              </button>
-            </div>
-          </div>
 
           <div class="date-units" id="date-units"></div>
         </div>
