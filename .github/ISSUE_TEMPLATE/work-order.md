@@ -18,6 +18,14 @@ assignees: []
 
 ## Background
 
+<!-- Anything here that is a reconstruction rather than something read from a
+     source must be marked `[INFERENCE]`. An unmarked guess in a contract is
+     indistinguishable from a requirement: WO-3 asserted that Programmer mode
+     evaluated left-to-right, the reference implementation contradicted it, and
+     because the assertion read as fact the Coder built against it — the
+     contradiction cost an escalation to unwind. The marker is what lets a Coder
+     check the claim instead of implementing it. -->
+
 ## In Scope
 
 ## Out of Scope
@@ -50,6 +58,11 @@ execution, dependency installers, spend. **Silence grants none of them.**
 
 - authorized:
 - not authorized:
+- third-party source: read for behaviour only | <what may be derived, and the
+  licence obligation it carries>. Reading an implementation to pin behaviour and
+  copying it are different acts — the first is research, the second is a
+  derivative work. Say which one this order allows. A project with no licence of
+  its own cannot coherently accept derived code.
 - owner gate required when:
 - governance-sensitive, needs independent review before it takes effect:
   changes to `AGENTS.md`, the pipeline skills, security policy, CI workflows,
@@ -64,7 +77,10 @@ execution, dependency installers, spend. **Silence grants none of them.**
 - Architecture effort: none / standard / high
 - Repository / target branch:
 - Base commit:
-- Executor:
+- Executor: <tool **and session surface** — "OMP in a Herdr pane (agent …, pane …)"
+  or "OMP headless one-shot". When a human is meant to watch the work, the
+  surface is part of the contract, not a dispatch detail; a run that happens on a
+  different surface is a finding, not a wording difference.>
 
 ---
 
