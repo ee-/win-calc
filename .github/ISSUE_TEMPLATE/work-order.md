@@ -20,11 +20,9 @@ assignees: []
 
 <!-- Anything here that is a reconstruction rather than something read from a
      source must be marked `[INFERENCE]`. An unmarked guess in a contract is
-     indistinguishable from a requirement: WO-3 asserted that Programmer mode
-     evaluated left-to-right, the reference implementation contradicted it, and
-     because the assertion read as fact the Coder built against it — the
-     contradiction cost an escalation to unwind. The marker is what lets a Coder
-     check the claim instead of implementing it. -->
+     indistinguishable from a requirement: the Coder builds against it, and
+     unwinding the contradiction costs an escalation. The marker is what lets a
+     Coder check the claim instead of implementing it. -->
 
 ## In Scope
 
