@@ -303,6 +303,184 @@ html[data-theme="light"] body { background: #e5e5e5; }
 .bit-key[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 .bit-key:disabled { color: var(--key-disabled); }
 
+/* Date Calculation: the mode is a form rather than a keypad, so it brings its
+ * own surface - the option selector, the date fields, the offset selectors and
+ * the live result (AC-005). */
+.date {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 6px 8px;
+}
+
+.date-top { display: flex; }
+
+.date-select {
+  flex: 1;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-key);
+  background: var(--key-function);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+}
+
+.date-settings { display: flex; flex-direction: column; gap: 8px; }
+
+.date-field { display: flex; flex-direction: column; gap: 3px; }
+
+.date-field-label { font-size: 12px; color: var(--text-muted); }
+
+.date-input-row { display: flex; gap: 4px; }
+
+.date-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-key);
+  background: var(--key-digit);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.date-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.date-input[aria-invalid="true"] { border-color: var(--accent); }
+
+.date-picker-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-key);
+  background: var(--key-function);
+  color: var(--text);
+  cursor: default;
+}
+
+.date-picker-button:hover { background: var(--key-function-hover); }
+.date-picker-button[aria-expanded="true"] { background: var(--key-selected); color: var(--key-selected-text); }
+
+.date-directions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; }
+
+.date-direction {
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-key);
+  background: var(--key-function);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+}
+
+.date-direction:hover { background: var(--key-function-hover); }
+.date-direction[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+
+.date-units { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+
+.date-unit { display: flex; flex-direction: column; gap: 3px; }
+
+.date-unit-label { font-size: 11px; color: var(--text-muted); }
+
+.date-unit-input {
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-key);
+  background: var(--key-digit);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+}
+
+.date-result { display: flex; flex-direction: column; gap: 2px; text-align: right; }
+
+.date-result-label { font-size: 12px; color: var(--text-muted); }
+
+.date-result-value {
+  display: block;
+  font-size: 20px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.date-result-days { min-height: 16px; font-size: 12px; color: var(--text-muted); }
+
+.date-calendar {
+  position: absolute;
+  right: 6px;
+  z-index: 3;
+  width: 236px;
+  padding: 6px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-window);
+  background: var(--drawer);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.date-calendar-header { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+
+.date-calendar-title { flex: 1; font-size: 12px; font-weight: 600; text-align: center; }
+
+.date-calendar-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-key);
+  background: transparent;
+  color: var(--text);
+  cursor: default;
+}
+
+.date-calendar-nav:hover:not(:disabled) { background: var(--key-hover); }
+.date-calendar-nav:disabled { color: var(--key-disabled); }
+
+.date-calendar-weekdays,
+.date-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.date-calendar-weekday { font-size: 10px; color: var(--text-muted); text-align: center; }
+
+.date-calendar-day {
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-key);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+
+.date-calendar-day:hover:not(:disabled) { background: var(--key-hover); }
+.date-calendar-day[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+.date-calendar-day:disabled { color: var(--key-disabled); }
+.date-calendar-day.is-blank { visibility: hidden; }
+
+/* The date view carries no memory row and no history panel, as the reference's
+ * date view has neither. */
+.calc[data-mode="date"] { --width: 380px; }
+.calc[data-mode="date"] .display { display: none; }
+.calc[data-mode="date"] .memory-row { display: none; }
+
 .placeholder {
   min-height: calc(var(--key-height) * 6 + 10px);
   display: flex;
